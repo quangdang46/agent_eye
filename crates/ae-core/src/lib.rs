@@ -1,9 +1,11 @@
 pub mod error;
+pub mod geometry;
 
 pub use error::{
     decode_failed, invalid_dimensions, rendering, resource_limit, serialization,
     unsupported_format, AeError, Result,
 };
+pub use geometry::{CoordinateTransform, HalfOpenBounds};
 
 pub const CRATE_NAME: &str = env!("CARGO_PKG_NAME");
 
