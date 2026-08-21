@@ -1,0 +1,21 @@
+[package]
+name = "ae-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Agent-Eye CLI: orchestration of ae-core and ae-render"
+
+[[bin]]
+name = "ae"
+path = "src/main.rs"
+
+[dependencies]
+ae-core = { workspace = true }
+ae-render = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

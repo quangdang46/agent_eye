@@ -1,0 +1,15 @@
+[package]
+name = "ae-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Agent-Eye renderers: ASCII, blocks, charset system"
+
+[dependencies]
+ae-core = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
