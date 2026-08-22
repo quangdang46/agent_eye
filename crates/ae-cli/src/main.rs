@@ -4,15 +4,15 @@
 /// CRLF translation cannot corrupt PNG/JPEG/WebP bytes (no-op elsewhere).
 #[cfg(windows)]
 fn set_stdin_binary() {
-    use std::os::windows::io::AsRawStdin;
+    // winapi-style: _setmode(0, _O_BINARY); 0 = stdin fd, 0x8000 = _O_BINARY.
+    // Stdin's raw handle IS its CRT fd on Windows, so pass the constant 0
+    // directly instead of relying on AsRawStdin (unstable for Stdin).
+    #[link(name = "ucrt")]
+    extern "C" {
+        fn _setmode(fd: i32, mode: i32) -> i32;
+    }
     unsafe {
-        // winapi-style: _setmode(0, _O_BINARY) == 0x8000
-        #[link(name = "ucrt")]
-        extern "C" {
-            fn _setmode(fd: i32, mode: i32) -> i32;
-        }
-        let fd = std::io::stdin().as_raw_stdin() as i32;
-        let _ = _setmode(fd, 0x8000);
+        let _ = _setmode(0, 0x8000);
     }
 }
 
