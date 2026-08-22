@@ -81,6 +81,17 @@ impl HalfOpenBounds {
             .then(self.x2.cmp(&other.x2))
             .then(self.y2.cmp(&other.y2))
     }
+
+    /// True when the x-intervals intersect (half-open: touching does not
+    /// overlap).
+    pub fn overlaps_x(&self, other: &Self) -> bool {
+        self.x1 < other.x2 && other.x1 < self.x2
+    }
+
+    /// True when the y-intervals intersect.
+    pub fn overlaps_y(&self, other: &Self) -> bool {
+        self.y1 < other.y2 && other.y1 < self.y2
+    }
 }
 
 impl TryFrom<[u32; 4]> for HalfOpenBounds {
