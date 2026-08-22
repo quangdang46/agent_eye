@@ -27,3 +27,4 @@ harness = false
 [dev-dependencies]
 proptest = { workspace = true }
 serde_json = { workspace = true }
+ae-render = { workspace = true }

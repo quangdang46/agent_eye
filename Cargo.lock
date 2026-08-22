@@ -25,6 +25,7 @@ dependencies = [
 name = "ae-core"
 version = "0.1.0"
 dependencies = [
+ "ae-render",
  "hex",
  "image",
  "proptest",

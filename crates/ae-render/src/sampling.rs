@@ -38,12 +38,16 @@ impl Block {
 
 /// Validate a caller-supplied aspect ratio.
 ///
-/// Rejects non-finite and non-positive values up front — NaN would otherwise
-/// poison every downstream block dimension silently.
+/// Rejects non-finite, non-positive, and denormal-tiny values. The upper
+/// bound keeps `block_w / aspect` inside f32 range for any legal image
+/// width (block_w ≤ 2³²; 1e-6 × u32::MAX ≈ 4.3e12 < f32::MAX ≈ 3.4e38,
+/// while anything below ~1e-30 overflows for even a 1-px block).
 pub fn validate_aspect_ratio(aspect_ratio: f32) -> Result<()> {
-    if !aspect_ratio.is_finite() || aspect_ratio <= 0.0 {
+    const MIN_ASPECT: f32 = 1e-6;
+    const MAX_ASPECT: f32 = 1e6;
+    if !aspect_ratio.is_finite() || !(MIN_ASPECT..=MAX_ASPECT).contains(&aspect_ratio) {
         return Err(rendering(format!(
-            "aspect_ratio must be finite and > 0, got {aspect_ratio}"
+            "aspect_ratio must be finite within [{MIN_ASPECT}, {MAX_ASPECT}], got {aspect_ratio}"
         )));
     }
     Ok(())
