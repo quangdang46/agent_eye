@@ -1,11 +1,13 @@
 pub mod error;
 pub mod geometry;
+pub mod image;
 
 pub use error::{
     decode_failed, invalid_dimensions, rendering, resource_limit, serialization,
     unsupported_format, AeError, Result,
 };
 pub use geometry::{CoordinateTransform, HalfOpenBounds};
+pub use image::{Dimensions, Image, ImageMetadata, Limits, Pixel, PixelBuffer};
 
 pub const CRATE_NAME: &str = env!("CARGO_PKG_NAME");
 
