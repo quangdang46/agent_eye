@@ -296,6 +296,44 @@ mod tests {
     }
 
     #[test]
+    fn dither_known_input_exact_output() {
+        // 2x1 image: left pixel black(0), right white(255); threshold 128.
+        // width=1 → one cell, sx=2; only x=0 is a sampled lattice point, so
+        // the black dot turns on (4 left-column dots = bits 1|2|4|64) and
+        // the unsampled right pixel never does. Exact deterministic output.
+        let im = img(2, 1, |x, _| {
+            if x == 0 {
+                Pixel::opaque(0, 0, 0)
+            } else {
+                Pixel::opaque(255, 255, 255)
+            }
+        });
+        let cfg = BrailleConfig {
+            width: 1,
+            dither: true,
+            ..Default::default()
+        };
+        let out = render_braille(&im, &cfg).unwrap();
+        assert_eq!(out, "\u{2801}\n");
+    }
+
+    #[test]
+    fn dither_deterministic_repeat() {
+        let im = img(24, 24, |x, y| {
+            let v = ((x * 53 + y * 29) % 256) as u8;
+            Pixel::opaque(v, v / 2, y as u8)
+        });
+        let cfg = BrailleConfig {
+            width: 12,
+            dither: true,
+            ..Default::default()
+        };
+        let a = render_braille(&im, &cfg).unwrap();
+        let b = render_braille(&im, &cfg).unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[test]
     fn tiny_images_do_not_panic() {
         for (w, h) in [(1u32, 1u32), (2, 3), (3, 2), (5, 5)] {
             let im = img(w, h, |_, _| Pixel::opaque(60, 60, 60));
