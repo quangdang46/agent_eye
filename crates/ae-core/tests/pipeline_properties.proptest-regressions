@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 96e829e47014696a2ed275da0155d7c03f1662460bb437a1bd0f719d8a3c4343 # shrinks to img = Image { dimensions: Dimensions { width: 1, height: 1 }, pixels: PixelBuffer { dims: Dimensions { width: 1, height: 1 }, data: [Pixel { r: 0, g: 255, b: 0, a: 255 }] }, metadata: ImageMetadata { format: None } }, w = 1, aspect = 2.351518e-39, invert = false
