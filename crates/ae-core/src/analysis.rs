@@ -184,11 +184,11 @@ pub mod color_variance {
         let n = slice.len() as f64;
         let chroma = |p: &super::Pixel| -> f64 {
             let (r, g, b) = (f64::from(p.r), f64::from(p.g), f64::from(p.b));
-            (((r - g) * (r - g) + (g - b) * (g - b) + (b - r) * (b - r)) as f64).sqrt()
+            ((r - g) * (r - g) + (g - b) * (g - b) + (b - r) * (b - r)).sqrt()
         };
         // Max chroma for 8-bit channels: r=255,g=0,b=0 → √(255² + 0 + 255²).
         let max = (2.0f64 * 255.0 * 255.0).sqrt();
-        let mean = slice.iter().map(|p| chroma(p)).sum::<f64>() / n;
+        let mean = slice.iter().map(&chroma).sum::<f64>() / n;
         slice
             .iter()
             .map(|p| {
