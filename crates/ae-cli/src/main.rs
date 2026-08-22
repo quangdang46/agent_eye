@@ -259,7 +259,6 @@ struct Representation<'a> {
     charset: &'a str,
     data: &'a str,
 }
-
 #[derive(serde::Serialize)]
 struct MappingInfo {
     source_bounds: [u32; 4],
@@ -269,6 +268,27 @@ struct MappingInfo {
     scale_y: f64,
     offset_x: f64,
     offset_y: f64,
+}
+
+impl MappingInfo {
+    /// Builds the mapping from `ae-core`'s canonical affine transform so
+    /// every JSON output shares one map-back implementation.
+    fn from_transform(t: &ae_core::geometry::CoordinateTransform) -> Self {
+        Self {
+            source_bounds: [
+                t.source_bounds.x1,
+                t.source_bounds.y1,
+                t.source_bounds.x2,
+                t.source_bounds.y2,
+            ],
+            output_width: t.output_width as usize,
+            output_height: t.output_height as usize,
+            scale_x: t.scale_x,
+            scale_y: t.scale_y,
+            offset_x: t.offset_x,
+            offset_y: t.offset_y,
+        }
+    }
 }
 
 fn cmd_render(spec: RenderSpec) -> i32 {
@@ -323,15 +343,12 @@ fn cmd_render(spec: RenderSpec) -> i32 {
                     charset: &grid.charset_name,
                     data: &grid.to_text(),
                 },
-                mapping: MappingInfo {
-                    source_bounds: [0, 0, img.dimensions.width, img.dimensions.height],
-                    output_width: out_w,
-                    output_height: out_h,
-                    scale_x: f64::from(img.dimensions.width) / f64::from(out_w as u32),
-                    scale_y: f64::from(img.dimensions.height) / f64::from(out_h as u32),
-                    offset_x: 0.0,
-                    offset_y: 0.0,
-                },
+                // Single source of truth for the affine map-back math.
+                mapping: MappingInfo::from_transform(&ae_core::geometry::CoordinateTransform::new(
+                    img.bounds(),
+                    out_w as u32,
+                    out_h as u32,
+                )),
             };
             match serde_json::to_string_pretty(&payload) {
                 Ok(s) => s,
