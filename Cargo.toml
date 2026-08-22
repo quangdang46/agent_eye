@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/ae-core", "crates/ae-render", "crates/ae-cli"]
+members = ["crates/ae-core", "crates/ae-render", "crates/ae-cli", "crates/ae-mcp"]
 
 [workspace.package]
 version = "0.1.0"
@@ -25,3 +25,4 @@ owo-colors = "4.0"
 anstyle = "1.0"
 terminal_size = "0.4"
 proptest = "1.6"
+anyhow = "1.0"
