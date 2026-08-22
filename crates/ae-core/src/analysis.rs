@@ -64,6 +64,42 @@ pub fn luminance_range(buf: &PixelBuffer) -> Option<(f32, f32)> {
     Some((min, max))
 }
 
+/// Sobel gradient magnitude per pixel, in `[0.0, 255.0]`.
+///
+/// Border pixels (1px frame) get strength `0.0` — the kernel has no
+/// out-of-bounds policy and fabricating border gradients would invent
+/// evidence. Output is row-major, same shape as the input buffer.
+///
+/// Deterministic: pure integer/fixed arithmetic on the Rec. 709 luminance
+/// plane; identical input ⇒ identical map.
+pub fn sobel_edges(buf: &PixelBuffer) -> Vec<f32> {
+    let dims = buf.dimensions();
+    let w = dims.width as usize;
+    let h = dims.height as usize;
+    let mut out = vec![0.0f32; w * h];
+    if w < 3 || h < 3 {
+        return out;
+    }
+    let lum = |x: usize, y: usize| luminance(buf.get(x as u32, y as u32).unwrap_or_default());
+    for y in 1..h - 1 {
+        for x in 1..w - 1 {
+            // Luminances of the 3×3 neighborhood.
+            let tl = lum(x - 1, y - 1);
+            let t = lum(x, y - 1);
+            let tr = lum(x + 1, y - 1);
+            let l = lum(x - 1, y);
+            let r = lum(x + 1, y);
+            let bl = lum(x - 1, y + 1);
+            let b = lum(x, y + 1);
+            let br = lum(x + 1, y + 1);
+            let gx = (tr + 2.0 * r + br) - (tl + 2.0 * l + bl);
+            let gy = (bl + 2.0 * b + br) - (tl + 2.0 * t + tr);
+            out[y * w + x] = (gx.hypot(gy)).min(255.0);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,5 +167,58 @@ mod tests {
         let (min, max) = luminance_range(&buf).unwrap();
         assert_eq!(min, 0.0);
         assert!((max - 255.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn sobel_uniform_image_has_zero_edges() {
+        let dims = Dimensions::new(8, 8).unwrap();
+        let buf = PixelBuffer::from_vec(dims, vec![Pixel::opaque(100, 100, 100); 64]).unwrap();
+        assert!(sobel_edges(&buf).iter().all(|e| *e < 1e-6));
+    }
+
+    #[test]
+    fn sobel_known_vertical_step_strong_edge() {
+        // Left half black, right half white → strong vertical edge at x=1..w-2.
+        let dims = Dimensions::new(4, 3).unwrap();
+        let mut pixels = Vec::new();
+        for _ in 0..3 {
+            pixels.push(Pixel::opaque(0, 0, 0));
+            pixels.push(Pixel::opaque(0, 0, 0));
+            pixels.push(Pixel::opaque(255, 255, 255));
+            pixels.push(Pixel::opaque(255, 255, 255));
+        }
+        let buf = PixelBuffer::from_vec(dims, pixels).unwrap();
+        let edges = sobel_edges(&buf);
+        // Border is zero; interior at the step is the max.
+        for y in [1usize] {
+            assert!(
+                edges[y * 4 + 1] > 250.0,
+                "step edge strong (clamped ≤255): {}",
+                edges[1]
+            );
+            assert!(edges[y * 4 + 2] > 250.0);
+            assert_eq!(edges[y * 4 + 3], 0.0);
+        }
+    }
+
+    #[test]
+    fn sobel_tiny_images_all_zero_without_panic() {
+        for (w, h) in [(1u32, 1u32), (2, 5), (5, 2), (2, 2)] {
+            let dims = Dimensions::new(w, h).unwrap();
+            let buf = PixelBuffer::zeroed(dims);
+            let e = sobel_edges(&buf);
+            assert_eq!(e.len(), (w * h) as usize);
+            assert!(e.iter().all(|v| *v == 0.0), "{w}x{h} must be all zero");
+        }
+    }
+
+    #[test]
+    fn sobel_deterministic() {
+        let dims = Dimensions::new(9, 7).unwrap();
+        let pixels: Vec<Pixel> = (0..63)
+            .map(|i| Pixel::opaque(((i * 13) % 256) as u8, 0, ((i * 7) % 256) as u8))
+            .collect();
+        let buf = PixelBuffer::from_vec(dims, pixels).unwrap();
+        assert_eq!(sobel_edges(&buf), sobel_edges(&buf));
     }
 }
