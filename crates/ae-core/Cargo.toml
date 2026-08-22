@@ -16,6 +16,10 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 unicode-segmentation = { workspace = true }
 
+[[bench]]
+name = "decode_bench"
+harness = false
+
 [dev-dependencies]
 proptest = { workspace = true }
 serde_json = { workspace = true }

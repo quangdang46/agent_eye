@@ -43,3 +43,74 @@ jobs:
           cargo build --locked
           ./target/debug/ae --version | grep -q "^ae "
           ./target/debug/ae --help | grep -qi "agent-eye"
+
+  guards:
+    # Regression guards (plan §13): binary size +20% → warning,
+    # startup time +30% → warning. Baseline per OS lives in
+    # .github/baselines/guards-<os>.json; first run creates it.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Build release binary
+        run: cargo build --release --locked
+      - name: Measure + guard
+        shell: bash
+        run: |
+          set -e
+          BIN=target/release/ae${{ runner.os == 'Windows' && '.exe' || '' }}
+          SIZE=$(stat -c%s "$BIN" 2>/dev/null || stat -f%z "$BIN")
+          STARTUP=$(python3 - <<'PY'
+          import subprocess,time
+          runs=[]
+          for _ in range(15):
+              t=time.perf_counter()
+              subprocess.run(["./target/release/ae","--version"],check=True,capture_output=True)
+              runs.append(time.perf_counter()-t)
+          print(f"{min(runs)*1000:.3f}")
+          PY
+          )
+          echo "size_bytes=$SIZE startup_ms=$STARTUP"
+          OS_LC=$(echo "${RUNNER_OS}" | tr '[:upper:]' '[:lower:]')
+          BASE=".github/baselines/guards-${OS_LC}.json"
+          NEWBASE=0
+          if [ ! -f "$BASE" ]; then
+            NEWBASE=1
+            echo "NEWBASE=1" >> "$GITHUB_ENV"
+            mkdir -p .github/baselines
+            printf '{"binary_size_bytes": %s, "startup_ms": %s}\n' "$SIZE" "$STARTUP" > "$BASE"
+            echo "::notice::No baseline found for ${RUNNER_OS}; one was generated. Download the guards-baseline artifact and commit it as ${BASE}."
+          fi
+          python3 - "$SIZE" "$STARTUP" "$BASE" <<'PY'
+          import json,sys
+          size,startup,path=float(sys.argv[1]),float(sys.argv[2]),sys.argv[3]
+          base=json.load(open(path))
+          ds=(size-base["binary_size_bytes"])/base["binary_size_bytes"]*100
+          dt=(startup-base["startup_ms"])/base["startup_ms"]*100
+          print(f"size {base['binary_size_bytes']:.0f}->{size:.0f} ({ds:+.1f}%)")
+          print(f"startup {base['startup_ms']:.1f}ms->{startup:.1f}ms ({dt:+.1f}%)")
+          if ds>20: print(f"::warning::binary size grew {ds:.1f}% (>20%)")
+          if dt>30: print(f"::warning::startup time grew {dt:.1f}% (>30%)")
+          PY
+      - name: Upload baseline artifact (first run only)
+        uses: actions/upload-artifact@v4
+        if: env.NEWBASE == '1'
+        with:
+          name: guards-baseline-${{ runner.os }}
+          path: .github/baselines/
+
+  bench:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Bench baseline
+        run: cargo bench --locked
