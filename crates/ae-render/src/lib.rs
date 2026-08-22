@@ -1,9 +1,11 @@
 pub mod charset;
+pub mod config;
 pub mod render;
 pub mod sampling;
 
 pub use charset::{presets, Charset, MAX_CHARSET_LEN};
-pub use render::{render, render_ascii, render_blocks, RenderConfig, RenderedGrid, RendererKind};
+pub use config::{ColorMode, RenderConfig, RendererType, DEFAULT_RENDER_WIDTH};
+pub use render::{render, render_ascii, render_blocks, RenderedGrid};
 pub use sampling::{sample_blocks, Block, DEFAULT_ASPECT_RATIO};
 
 pub const CRATE_NAME: &str = env!("CARGO_PKG_NAME");
