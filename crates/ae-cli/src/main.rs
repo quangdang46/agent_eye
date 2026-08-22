@@ -45,6 +45,20 @@ enum Command {
         #[arg(long, value_enum, default_value_t = FormatArg::Text)]
         format: FormatArg,
     },
+    /// Spatial evidence: detected regions and their formal relations.
+    Geometry {
+        /// Image path, or `-` for stdin.
+        image: PathBuf,
+        /// Output serialization.
+        #[arg(long, value_enum, default_value_t = FormatArg::Text)]
+        format: FormatArg,
+        /// Write result to file instead of stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Overwrite `--output` file if it exists.
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
     /// Extract a specific area as a rendered region with full provenance.
     Region {
         /// Image path, or `-` for stdin.
@@ -127,11 +141,23 @@ enum FormatArg {
     Text,
     Json,
 }
+
 fn main() {
     set_stdin_binary();
     let cli = Cli::parse();
     let exit_code = match cli.command {
         Command::Capabilities { format } => cmd_capabilities(format),
+        Command::Geometry {
+            image,
+            format,
+            output,
+            force,
+        } => cmd_geometry(GeometrySpec {
+            image,
+            format,
+            output,
+            force,
+        }),
         Command::Region {
             image,
             box_,
@@ -254,6 +280,106 @@ fn cmd_capabilities(format: FormatArg) -> i32 {
         },
     }
     0
+}
+
+struct GeometrySpec {
+    image: PathBuf,
+    format: FormatArg,
+    output: Option<PathBuf>,
+    force: bool,
+}
+
+/// `agent-eye.geometry.v1` payload.
+#[derive(serde::Serialize)]
+struct GeometryJsonV1 {
+    schema_version: &'static str,
+    image: ImageInfoOwned,
+    provenance: ProvenanceJson,
+    regions: Vec<RegionInfo>,
+    relations: Vec<ae_core::relations::Relation>,
+    mapping: MappingInfo,
+}
+
+fn cmd_geometry(spec: GeometrySpec) -> i32 {
+    let bytes = match read_input(&spec.image) {
+        Ok(b) => b,
+        Err(e) => return fail(&e),
+    };
+    let img = match decode_bytes(&bytes, &Limits::default()) {
+        Ok(i) => i,
+        Err(e) => return fail(&e.to_string()),
+    };
+    let cfg = ae_core::regions::DetectConfig::default();
+    let regions = match ae_core::regions::detect_regions(&img, &cfg) {
+        Ok(r) => r,
+        Err(e) => return fail(&e.to_string()),
+    };
+    let relations = ae_core::relations::compute_relations(&regions);
+    let transform = ae_core::geometry::CoordinateTransform::new(
+        img.bounds(),
+        img.dimensions.width,
+        img.dimensions.height,
+    );
+
+    let body = match spec.format {
+        FormatArg::Text => {
+            let mut s = String::new();
+            s.push_str(&format!(
+                "image: {}x{} ({})\n",
+                img.dimensions.width,
+                img.dimensions.height,
+                img.metadata.format.as_deref().unwrap_or("unknown")
+            ));
+            s.push_str(&format!("regions: {}\n", regions.len()));
+            for r in &regions {
+                s.push_str(&format!(
+                    "  {} bounds={:?} area={:.3} edge_density={:.3} color_variance={:.3}\n",
+                    r.id,
+                    r.bounds.to_array(),
+                    r.area,
+                    r.edge_density,
+                    r.color_variance
+                ));
+            }
+            s.push_str(&format!("relations: {}\n", relations.len()));
+            for rel in &relations {
+                s.push_str(&format!("  {} {} {}\n", rel.kind, rel.a, rel.b));
+            }
+            s
+        }
+        FormatArg::Json => {
+            let prov = ae_core::provenance::Provenance::compute(&bytes, img.bounds(), transform);
+            let payload = GeometryJsonV1 {
+                schema_version: "agent-eye.geometry.v1",
+                image: ImageInfoOwned {
+                    width: img.dimensions.width,
+                    height: img.dimensions.height,
+                    format: img.metadata.format.clone(),
+                },
+                provenance: ProvenanceJson {
+                    source_hash: prov.source_hash,
+                    source_bounds: prov.source_bounds.to_array(),
+                },
+                regions: regions
+                    .iter()
+                    .map(|r| RegionInfo {
+                        id: r.id.clone(),
+                        bounds: r.bounds.to_array(),
+                        area: r.area,
+                        edge_density: r.edge_density,
+                        color_variance: r.color_variance,
+                    })
+                    .collect(),
+                relations,
+                mapping: MappingInfo::from_transform(&transform),
+            };
+            match serde_json::to_string_pretty(&payload) {
+                Ok(s) => s,
+                Err(e) => return fail(&e.to_string()),
+            }
+        }
+    };
+    emit(&body, spec.output.as_deref(), spec.force)
 }
 
 struct RegionSpec {
