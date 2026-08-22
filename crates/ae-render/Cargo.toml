@@ -10,6 +10,9 @@ description = "Agent-Eye renderers: ASCII, blocks, charset system"
 
 [dependencies]
 ae-core = { workspace = true }
+unicode-segmentation = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

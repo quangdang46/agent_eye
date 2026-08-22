@@ -18,8 +18,9 @@ fn from_rgba8(dims: Dimensions, rgba: image::RgbaImage, format_name: &str) -> Re
         .map(|p| Pixel::new(p.0[0], p.0[1], p.0[2], p.0[3]))
         .collect();
     let buf = PixelBuffer::from_vec(dims, pixels)?;
-    let mut meta = ImageMetadata::default();
-    meta.format = Some(format_name.to_string());
+    let meta = ImageMetadata {
+        format: Some(format_name.to_string()),
+    };
     Image::new(dims, buf, meta)
 }
 

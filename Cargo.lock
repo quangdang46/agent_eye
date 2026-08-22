@@ -40,6 +40,9 @@ version = "0.1.0"
 dependencies = [
  "ae-core",
  "proptest",
+ "serde",
+ "thiserror",
+ "unicode-segmentation",
 ]
 
 [[package]]
