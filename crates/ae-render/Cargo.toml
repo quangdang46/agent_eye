@@ -16,3 +16,8 @@ serde = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+image = { workspace = true, features = ["png"] }
+
+[[bench]]
+name = "perf_bench"
+harness = false
