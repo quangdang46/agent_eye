@@ -45,6 +45,18 @@ enum Command {
         #[arg(long, value_enum, default_value_t = FormatArg::Text)]
         format: FormatArg,
     },
+    /// Batch mode: inspect every image in a directory, JSONL output,
+    /// parallel via rayon. Deterministic ordering (sorted by path).
+    Batch {
+        /// Directory containing images (png/jpeg/webp).
+        path: PathBuf,
+        /// Output width for embedded renders.
+        #[arg(long, default_value_t = 60)]
+        width: u32,
+        /// Skip ASCII overview in each record.
+        #[arg(long, default_value_t = false)]
+        no_render: bool,
+    },
     /// Orchestrated overview: dimensions, regions, relations, rendering,
     /// mapping — the agent's first look at an image.
     Inspect {
@@ -200,6 +212,11 @@ fn main() {
     let cli = Cli::parse();
     let exit_code = match cli.command {
         Command::Capabilities { format } => cmd_capabilities(format),
+        Command::Batch {
+            path,
+            width,
+            no_render,
+        } => cmd_batch(&path, width, no_render),
         Command::Inspect {
             image,
             width,
@@ -372,6 +389,111 @@ fn cmd_capabilities(format: FormatArg) -> i32 {
             Ok(s) => println!("{s}"),
             Err(e) => return fail(&e.to_string()),
         },
+    }
+    0
+}
+
+/// One JSONL record for batch output (agent-eye.scene.v1 + file name).
+fn batch_record(path: &Path, width: u32, no_render: bool) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+    let img = decode_bytes(&bytes, &Limits::default()).ok()?;
+    let cfg = ae_core::regions::DetectConfig::default();
+    let regions = ae_core::regions::detect_regions(&img, &cfg).ok()?;
+    let relations = ae_core::relations::compute_relations(&regions);
+
+    let mut representation: Option<RepresentationOwned> = None;
+    if !no_render {
+        let charset = ae_render::presets::standard().ok()?;
+        let rcfg = ae_render::RenderConfig {
+            width: width.clamp(1, 10_000),
+            ..Default::default()
+        };
+        let grid = ae_render::render::render(&img, &rcfg, &charset).ok()?;
+        representation = Some(RepresentationOwned {
+            renderer: "ascii",
+            charset: grid.charset_name.clone(),
+            data: grid.to_text(),
+        });
+    }
+
+    let transform = ae_core::geometry::CoordinateTransform::new(
+        img.bounds(),
+        img.dimensions.width,
+        img.dimensions.height,
+    );
+    let prov = ae_core::provenance::Provenance::compute(&bytes, img.bounds(), transform);
+
+    let payload = SceneJsonV1 {
+        schema_version: "agent-eye.scene.v1",
+        image: ImageInfoOwned {
+            width: img.dimensions.width,
+            height: img.dimensions.height,
+            format: img.metadata.format.clone(),
+        },
+        provenance: ProvenanceJson {
+            source_hash: prov.source_hash,
+            source_bounds: prov.source_bounds.to_array(),
+        },
+        regions: regions
+            .iter()
+            .map(|r| RegionInfo {
+                id: r.id.clone(),
+                bounds: r.bounds.to_array(),
+                area: r.area,
+                edge_density: r.edge_density,
+                color_variance: r.color_variance,
+            })
+            .collect(),
+        relations,
+        representation,
+        mapping: MappingInfo::from_transform(&transform),
+    };
+    // Prepend the source file so JSONL consumers can join results.
+    let mut v = serde_json::to_value(&payload).ok()?;
+    v["file"] = serde_json::Value::String(path.display().to_string());
+    serde_json::to_string(&v).ok()
+}
+
+/// `ae batch <dir>`: parallel inspect of every decodable image in a
+/// directory. Output is JSONL on stdout, ordered deterministically by
+/// sorted path — rayon parallelism never reorders lines.
+fn cmd_batch(dir: &Path, width: u32, no_render: bool) -> i32 {
+    if !dir.is_dir() {
+        return fail(&format!("{} is not a directory", dir.display()));
+    }
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) => return fail(&format!("{}: {e}", dir.display())),
+    };
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            matches!(
+                p.extension().and_then(|e| e.to_str()),
+                Some("png") | Some("jpg") | Some("jpeg") | Some("webp")
+            )
+        })
+        .collect();
+    if files.is_empty() {
+        return fail(&format!(
+            "no png/jpeg/webp images found in {}",
+            dir.display()
+        ));
+    }
+    files.sort(); // deterministic ordering independent of FS enumeration
+
+    use rayon::prelude::*;
+    let records: Vec<Option<String>> = files
+        .par_iter()
+        .map(|p| batch_record(p, width, no_render))
+        .collect();
+
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    use std::io::Write;
+    for line in records.into_iter().flatten() {
+        let _ = writeln!(out, "{line}");
     }
     0
 }
