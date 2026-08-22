@@ -20,6 +20,10 @@ unicode-segmentation = { workspace = true }
 name = "decode_bench"
 harness = false
 
+[[bench]]
+name = "region_bench"
+harness = false
+
 [dev-dependencies]
 proptest = { workspace = true }
 serde_json = { workspace = true }
