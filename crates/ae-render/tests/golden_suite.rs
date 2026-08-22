@@ -103,11 +103,6 @@ fn golden_outputs_match() {
                     .unwrap_or_else(|e| panic!("golden {} not UTF-8: {e}", path.display()))
                     .replace("\r\n", "\n")
             };
-                panic!(
-                    "golden {} missing ({e}); run REGENERATE_GOLDEN=1 and review",
-                    path.display()
-                )
-            });
             assert_eq!(
                 text, golden,
                 "golden drift for {stem}/{}. If intentional, regenerate + review.",
