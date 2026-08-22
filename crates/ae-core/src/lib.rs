@@ -1,6 +1,7 @@
 pub mod error;
 pub mod geometry;
 pub mod image;
+pub mod provenance;
 
 pub use error::{
     decode_failed, invalid_dimensions, rendering, resource_limit, serialization,
@@ -8,6 +9,7 @@ pub use error::{
 };
 pub use geometry::{CoordinateTransform, HalfOpenBounds};
 pub use image::{Dimensions, Image, ImageMetadata, Limits, Pixel, PixelBuffer};
+pub use provenance::Provenance;
 
 pub const CRATE_NAME: &str = env!("CARGO_PKG_NAME");
 
