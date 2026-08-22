@@ -485,6 +485,7 @@ mod tests {
                 Pixel::opaque(v, 255 - v, (i % 2 * 255) as u8)
             })
             .collect();
+        let noisy = PixelBuffer::from_vec(dims, noisy_pixels).unwrap();
         let c_noisy = VisualComplexity::compute(&noisy);
         assert!(c_noisy.score > c_flat.score);
         assert!(c_noisy.score <= 1.0 && c_flat.score <= 1.0);
