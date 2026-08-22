@@ -68,6 +68,10 @@ enum Command {
         /// Skip the ASCII overview (geometry only).
         #[arg(long, default_value_t = false)]
         no_render: bool,
+        /// Total character budget for adaptive per-region crops
+        /// (complexity-ranked allocation).
+        #[arg(long)]
+        budget: Option<u32>,
         /// Output serialization.
         #[arg(long, value_enum, default_value_t = FormatArg::Text)]
         format: FormatArg,
@@ -229,6 +233,7 @@ fn main() {
             image,
             width,
             no_render,
+            budget,
             format,
             output,
             force,
@@ -236,6 +241,7 @@ fn main() {
             image,
             width,
             no_render,
+            budget,
             format,
             output,
             force,
@@ -457,6 +463,7 @@ fn batch_record(path: &Path, width: u32, no_render: bool) -> Option<String> {
             })
             .collect(),
         relations,
+        adaptive: Vec::new(),
         representation,
         mapping: MappingInfo::from_transform(&transform),
     };
@@ -514,6 +521,8 @@ struct InspectSpec {
     image: PathBuf,
     width: u32,
     no_render: bool,
+    /// Total character budget for adaptive per-region crops.
+    budget: Option<u32>,
     format: FormatArg,
     output: Option<PathBuf>,
     force: bool,
@@ -527,8 +536,19 @@ struct SceneJsonV1 {
     provenance: ProvenanceJson,
     regions: Vec<RegionInfo>,
     relations: Vec<ae_core::relations::Relation>,
+    /// Per-region adaptive crops (present when --budget is given).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    adaptive: Vec<AdaptiveCrop>,
     representation: Option<RepresentationOwned>,
     mapping: MappingInfo,
+}
+
+/// One complexity-ranked crop within the budget.
+#[derive(serde::Serialize)]
+struct AdaptiveCrop {
+    id: String,
+    width: u32,
+    data: String,
 }
 
 /// Orchestrates decode → detect → relate → render → provenance. The CLI is
@@ -551,7 +571,6 @@ fn cmd_inspect(spec: InspectSpec) -> i32 {
 
     // Optional ASCII overview at the requested width.
     let mut representation: Option<RepresentationOwned> = None;
-    let mut render_cfg: Option<(ae_render::RenderConfig, ae_render::Charset)> = None;
     if !spec.no_render {
         let charset = match ae_render::presets::standard() {
             Ok(c) => c,
@@ -568,12 +587,40 @@ fn cmd_inspect(spec: InspectSpec) -> i32 {
                     charset: grid.charset_name.clone(),
                     data: grid.to_text(),
                 });
-                render_cfg = Some((rcfg, charset));
             }
             Err(e) => return fail(&e.to_string()),
         }
     }
-    let _ = &render_cfg; // kept for symmetry with region/zoom paths
+
+    let mut adaptive: Vec<AdaptiveCrop> = Vec::new();
+    // Adaptive budget: complexity-ranked per-region crops within a total
+    // character budget.
+    if let Some(budget) = spec.budget.filter(|b| *b > 0) {
+        let slices = ae_render::allocate(&regions, budget);
+        for slice in &slices {
+            let Some(r) = regions.iter().find(|r| r.id == slice.id) else {
+                continue;
+            };
+            let cropped = crop_image(&img, r.bounds);
+            let charset = match ae_render::presets::standard() {
+                Ok(c) => c,
+                Err(e) => return fail(&e.to_string()),
+            };
+            let rcfg = ae_render::RenderConfig {
+                width: slice.allocated_width.clamp(1, 10_000),
+                aspect_ratio: 1.0,
+                ..Default::default()
+            };
+            match ae_render::render::render(&cropped, &rcfg, &charset) {
+                Ok(grid) => adaptive.push(AdaptiveCrop {
+                    id: r.id.clone(),
+                    width: grid.width() as u32,
+                    data: grid.to_text(),
+                }),
+                Err(e) => return fail(&e.to_string()),
+            }
+        }
+    }
 
     let transform = ae_core::geometry::CoordinateTransform::new(
         img.bounds(),
@@ -609,6 +656,20 @@ fn cmd_inspect(spec: InspectSpec) -> i32 {
             for rel in &relations {
                 s.push_str(&format!("  {} {} {}\n", rel.kind, rel.a, rel.b));
             }
+            if !adaptive.is_empty() {
+                s.push_str(&format!(
+                    "adaptive_crops (budget={}):\n",
+                    spec.budget.unwrap_or(0)
+                ));
+                for a in &adaptive {
+                    s.push_str(&format!(
+                        "  {} width={} {}\n",
+                        a.id,
+                        a.width,
+                        serde_json::to_string(&a.data).unwrap_or_default()
+                    ));
+                }
+            }
             s
         }
         FormatArg::Json => {
@@ -634,6 +695,7 @@ fn cmd_inspect(spec: InspectSpec) -> i32 {
                     })
                     .collect(),
                 relations,
+                adaptive,
                 representation,
                 mapping: MappingInfo::from_transform(&transform),
             };
