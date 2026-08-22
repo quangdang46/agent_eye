@@ -72,6 +72,15 @@ impl HalfOpenBounds {
     pub fn to_array(&self) -> [u32; 4] {
         [self.x1, self.y1, self.x2, self.y2]
     }
+
+    /// Lexicographic tie-break ordering for deterministic region sorts.
+    pub fn cmp_key(&self, other: &Self) -> std::cmp::Ordering {
+        self.x1
+            .cmp(&other.x1)
+            .then(self.y1.cmp(&other.y1))
+            .then(self.x2.cmp(&other.x2))
+            .then(self.y2.cmp(&other.y2))
+    }
 }
 
 impl TryFrom<[u32; 4]> for HalfOpenBounds {

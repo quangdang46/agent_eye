@@ -199,10 +199,35 @@ pub mod color_variance {
             / n
             / (max * max)
     }
+
+    /// Chroma variance restricted to a half-open bounds window (regions).
+    pub fn chroma_variance_window(buf: &PixelBuffer, b: crate::geometry::HalfOpenBounds) -> f64 {
+        let w = buf.dimensions().width as usize;
+        let h = buf.dimensions().height as usize;
+        let (x1, y1) = (b.x1 as usize, b.y1 as usize);
+        let (x2, y2) = (b.x2.min(w as u32) as usize, b.y2.min(h as u32) as usize);
+        if x1 >= x2 || y1 >= y2 {
+            return 0.0;
+        }
+        let mut vals = Vec::new();
+        for row in y1..y2 {
+            let start = row * w;
+            for p in &buf.as_slice()[start + x1..start + x2] {
+                let (r, g, bl) = (f64::from(p.r), f64::from(p.g), f64::from(p.b));
+                vals.push(((r - g) * (r - g) + (g - bl) * (g - bl) + (bl - r) * (bl - r)).sqrt());
+            }
+        }
+        if vals.is_empty() {
+            return 0.0;
+        }
+        let n = vals.len() as f64;
+        // Max chroma for 8-bit channels: √(2·255²).
+        let max = (2.0f64 * 255.0 * 255.0).sqrt();
+        let mean = vals.iter().sum::<f64>() / n;
+        vals.iter().map(|c| (c - mean) * (c - mean)).sum::<f64>() / n / (max * max)
+    }
 }
 
-/// Weighted-aggregate visual complexity score (plan §8).
-///
 /// Internal implementation detail for the future `--budget` adaptive
 /// rendering (Phase 8 P1); not exposed through the CLI in v1. Purely
 /// geometric/statistical — carries no task relevance or semantics.

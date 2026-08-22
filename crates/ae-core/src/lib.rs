@@ -3,7 +3,9 @@ pub mod decode;
 pub mod error;
 pub mod geometry;
 pub mod image;
+
 pub mod provenance;
+pub mod regions;
 
 pub use analysis::{
     average_pixel, block_luminance, color_variance, contrast, luminance, luminance_range,
