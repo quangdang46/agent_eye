@@ -27,8 +27,7 @@ fail=0
 row() { printf "%-22s %9s %8s %8s %8s  %s\n" "$1" "$2" "$3" "$4" "$5" "$6"; }
 
 printf "%-22s %9s %8s %8s %8s  %s\n" "CASE" "OV_BYTES" "ZM_BYTES" "TOOLS" "OV_GLYPHS" "CROP_GLYPHS (new glyphs)"
-
-for img in fixtures/001-ui.png fixtures/002-diagram.png fixtures/004-screenshot.png fixtures/003-button.png; do
+for img in "$here/fixtures/001-ui.png" "$here/fixtures/002-diagram.png" "$here/fixtures/004-screenshot.png" "$here/fixtures/003-button.png"; do
   # Step 1: overview.
   overview=$("$AE_BIN" inspect "$img" --no-render --format json)
   ov_bytes=${#overview}
