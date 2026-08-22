@@ -90,7 +90,19 @@ fn golden_outputs_match() {
                 fs::write(&path, &text).unwrap();
                 continue;
             }
-            let golden = fs::read_to_string(&path).unwrap_or_else(|e| {
+            // Read as bytes and normalize CRLF: git may check the goldens
+            // out with Windows line endings on windows-latest runners.
+            let golden = {
+                let raw = fs::read(&path).unwrap_or_else(|e| {
+                    panic!(
+                        "golden {} missing ({e}); run REGENERATE_GOLDEN=1 and review",
+                        path.display()
+                    )
+                });
+                String::from_utf8(raw)
+                    .unwrap_or_else(|e| panic!("golden {} not UTF-8: {e}", path.display()))
+                    .replace("\r\n", "\n")
+            };
                 panic!(
                     "golden {} missing ({e}); run REGENERATE_GOLDEN=1 and review",
                     path.display()
