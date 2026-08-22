@@ -242,8 +242,16 @@ struct RenderSpec {
 struct RenderJsonV1<'a> {
     schema_version: &'static str,
     image: ImageInfo<'a>,
+    /// SHA-256 of original bytes + bounds + affine map-back.
+    provenance: ProvenanceJson,
     representation: Representation<'a>,
     mapping: MappingInfo,
+}
+
+#[derive(serde::Serialize)]
+struct ProvenanceJson {
+    source_hash: String,
+    source_bounds: [u32; 4],
 }
 
 #[derive(serde::Serialize)]
@@ -331,12 +339,25 @@ fn cmd_render(spec: RenderSpec) -> i32 {
         FormatArg::Json => {
             let out_w = grid.width().max(1);
             let out_h = grid.height().max(1);
+            let prov = ae_core::provenance::Provenance::compute(
+                &bytes,
+                img.bounds(),
+                ae_core::geometry::CoordinateTransform::new(
+                    img.bounds(),
+                    out_w as u32,
+                    out_h as u32,
+                ),
+            );
             let payload = RenderJsonV1 {
                 schema_version: "agent-eye.render.v1",
                 image: ImageInfo {
                     width: img.dimensions.width,
                     height: img.dimensions.height,
                     format: &img.metadata.format,
+                },
+                provenance: ProvenanceJson {
+                    source_hash: prov.source_hash,
+                    source_bounds: prov.source_bounds.to_array(),
                 },
                 representation: Representation {
                     renderer: spec.renderer.as_str(),
