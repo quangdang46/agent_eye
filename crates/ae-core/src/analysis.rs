@@ -100,6 +100,107 @@ pub fn sobel_edges(buf: &PixelBuffer) -> Vec<f32> {
     out
 }
 
+/// Contrast analysis for a pixel buffer (plan §8, internal VisualComplexity
+/// inputs — not exposed in CLI v1).
+pub mod contrast {
+    use super::{luminance_range, PixelBuffer};
+
+    /// Global contrast: RMS contrast over the Rec. 709 luminance plane,
+    /// normalized to `[0.0, 1.0]` by 255.
+    ///
+    /// RMS is preferred over Michelson because it stays defined for flat
+    /// images (Michelson divides by zero there).
+    pub fn rms(buf: &PixelBuffer) -> f64 {
+        let slice = buf.as_slice();
+        if slice.is_empty() {
+            return 0.0;
+        }
+        let n = slice.len() as f64;
+        let mean = slice.iter().map(|p| f64::from(p.luminance())).sum::<f64>() / n;
+        let var = slice
+            .iter()
+            .map(|p| {
+                let d = f64::from(p.luminance()) - mean;
+                d * d
+            })
+            .sum::<f64>()
+            / n;
+        (var.sqrt()) / 255.0
+    }
+
+    /// Dynamic range `(min_luma, max_luma)` of the buffer, normalized to
+    /// `[0.0, 1.0]`. `None` only when the buffer is empty.
+    pub fn dynamic_range(buf: &PixelBuffer) -> Option<(f32, f32)> {
+        luminance_range(buf).map(|(lo, hi)| (lo / 255.0, hi / 255.0))
+    }
+
+    /// Local RMS contrast inside one half-open block, sharing the block
+    /// iteration convention with rendering (`block_w × block_h` windows).
+    pub fn local_rms(buf: &PixelBuffer, bounds: crate::geometry::HalfOpenBounds) -> f64 {
+        let w = buf.dimensions().width as usize;
+        let h = buf.dimensions().height as usize;
+        let (x1, y1) = (bounds.x1 as usize, bounds.y1 as usize);
+        let (x2, y2) = (
+            bounds.x2.min(w as u32) as usize,
+            bounds.y2.min(h as u32) as usize,
+        );
+        if x1 >= x2 || y1 >= y2 {
+            return 0.0;
+        }
+        let slice = &buf.as_slice()[y1 * w..y2 * w];
+        let mut sum = 0.0f64;
+        let mut sq = 0.0f64;
+        let mut count = 0u64;
+        for row in slice.chunks_exact(w) {
+            for p in &row[x1..x2] {
+                let l = f64::from(p.luminance());
+                sum += l;
+                sq += l * l;
+                count += 1;
+            }
+        }
+        if count == 0 {
+            return 0.0;
+        }
+        let n = count as f64;
+        let mean = sum / n;
+        ((sq / n - mean * mean).max(0.0)).sqrt() / 255.0
+    }
+}
+
+/// Color variance metrics (plan §8): how much chroma varies across the
+/// buffer — near zero for grayscale content even when busy in luminance.
+pub mod color_variance {
+    use super::PixelBuffer;
+
+    /// Population variance of per-pixel chroma magnitude
+    /// `sqrt((r-g)^2 + (g-b)^2 + (b-r)^2)`, normalized by the max possible
+    /// (√2·255), so result ∈ `[0.0, 1.0]`.
+    pub fn chroma_variance(buf: &PixelBuffer) -> f64 {
+        let slice = buf.as_slice();
+        if slice.is_empty() {
+            return 0.0;
+        }
+        let n = slice.len() as f64;
+        let chroma = |p: &super::Pixel| -> f64 {
+            let (r, g, b) = (f64::from(p.r), f64::from(p.g), f64::from(p.b));
+            (((r - g) * (r - g) + (g - b) * (g - b) + (b - r) * (b - r)) as f64).sqrt()
+        };
+        // Max chroma for 8-bit channels: r=255,g=0,b=0 → √(255² + 0 + 255²).
+        let max = (2.0f64 * 255.0 * 255.0).sqrt();
+        let mean = slice.iter().map(|p| chroma(p)).sum::<f64>() / n;
+        slice
+            .iter()
+            .map(|p| {
+                let d = chroma(p) - mean;
+                d * d
+            })
+            .sum::<f64>()
+            / n
+            / (max * max)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,5 +320,62 @@ mod tests {
             .collect();
         let buf = PixelBuffer::from_vec(dims, pixels).unwrap();
         assert_eq!(sobel_edges(&buf), sobel_edges(&buf));
+    }
+
+    #[test]
+    fn rms_flat_is_zero_noisy_is_positive() {
+        let dims = Dimensions::new(4, 4).unwrap();
+        let flat = PixelBuffer::from_vec(dims, vec![Pixel::opaque(128, 128, 128); 16]).unwrap();
+        assert_eq!(contrast::rms(&flat), 0.0);
+        let mixed: Vec<Pixel> = (0..16)
+            .map(|i| Pixel::opaque(((i * 17) % 256) as u8, 0, 0))
+            .collect();
+        let noisy = PixelBuffer::from_vec(dims, mixed).unwrap();
+        assert!(contrast::rms(&noisy) > 0.05);
+        assert!(contrast::rms(&noisy) <= 1.0);
+    }
+
+    #[test]
+    fn dynamic_range_endpoints() {
+        let dims = Dimensions::new(2, 1).unwrap();
+        let buf = PixelBuffer::from_vec(
+            dims,
+            vec![Pixel::opaque(0, 0, 0), Pixel::opaque(255, 255, 255)],
+        )
+        .unwrap();
+        let (lo, hi) = contrast::dynamic_range(&buf).unwrap();
+        assert_eq!((lo, hi), (0.0, 1.0));
+    }
+
+    #[test]
+    fn local_rms_matches_global_on_full_bounds() {
+        let dims = Dimensions::new(6, 6).unwrap();
+        let pixels: Vec<Pixel> = (0..36)
+            .map(|i| Pixel::opaque(((i * 23) % 256) as u8, ((i * 5) % 256) as u8, 30))
+            .collect();
+        let buf = PixelBuffer::from_vec(dims, pixels).unwrap();
+        let full = crate::geometry::HalfOpenBounds::covering(6, 6);
+        assert!((contrast::local_rms(&buf, full) - contrast::rms(&buf)).abs() < 1e-9);
+        // Empty block → zero.
+        let empty = crate::geometry::HalfOpenBounds::new(2, 2, 2, 2).unwrap();
+        assert_eq!(contrast::local_rms(&buf, empty), 0.0);
+    }
+
+    #[test]
+    fn chroma_variance_grayscale_zero_colored_positive() {
+        let dims = Dimensions::new(3, 3).unwrap();
+        let colored: Vec<Pixel> = (0..9)
+            .map(|i| {
+                // Vary chroma magnitude: saturated red ↔ near-gray.
+                if i % 2 == 0 {
+                    Pixel::opaque(255, 0, 0)
+                } else {
+                    Pixel::opaque(128, 128, 120)
+                }
+            })
+            .collect();
+        let cv = PixelBuffer::from_vec(dims, colored).unwrap();
+        assert!(color_variance::chroma_variance(&cv) > 0.01);
+        assert!(color_variance::chroma_variance(&cv) <= 1.0);
     }
 }

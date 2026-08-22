@@ -5,7 +5,10 @@ pub mod geometry;
 pub mod image;
 pub mod provenance;
 
-pub use analysis::{average_pixel, block_luminance, luminance, luminance_range, sobel_edges};
+pub use analysis::{
+    average_pixel, block_luminance, color_variance, contrast, luminance, luminance_range,
+    sobel_edges,
+};
 pub use decode::decode_bytes;
 pub use error::{
     decode_failed, invalid_dimensions, rendering, resource_limit, serialization,
