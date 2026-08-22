@@ -855,7 +855,9 @@ fn cmd_region(spec: RegionSpec) -> i32 {
                     source_bounds: prov.source_bounds.to_array(),
                 },
                 region: RegionInfo {
-                    id: if region.id.is_empty() {
+                    id: if let Some(rid) = &spec.region {
+                        rid.clone()
+                    } else if region.id.is_empty() {
                         "custom".to_owned()
                     } else {
                         region.id.clone()
