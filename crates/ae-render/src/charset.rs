@@ -99,6 +99,18 @@ pub mod presets {
     /// 5-level Unicode blocks — highest spatial fidelity per cell.
     pub const BLOCKS: &[&str] = &["█", "▓", "▒", "░", " "];
 
+    /// 8-level Cyrillic ramp, dark→light (multilingual support).
+    pub const CYRILLIC: &[&str] = &["Ж", "М", "@", "#", "В", "О", "С", " "];
+
+    /// 6-level CJK ramp, dark→light. Full-width cells double the horizontal
+    /// footprint per glyph; density ordering follows stroke counts.
+    pub const CJK: &[&str] = &["國", "龜", "田", "口", "日", " "];
+
+    /// 12-level extended ramp mixing Latin-1 box/shade glyphs with core
+    /// ASCII, dark→light.
+    pub const EXTENDED_ASCII: &[&str] =
+        &["█", "▓", "▒", "@", "#", "%", "&", "$", "*", "+", "-", "."];
+
     pub fn standard() -> Result<Charset> {
         Charset::new("standard", STANDARD.iter().map(|s| (*s).into()).collect())
     }
@@ -111,12 +123,30 @@ pub mod presets {
         Charset::new("blocks", BLOCKS.iter().map(|s| (*s).into()).collect())
     }
 
-    /// Named preset lookup (`standard | dense | blocks`).
+    pub fn cyrillic() -> Result<Charset> {
+        Charset::new("cyrillic", CYRILLIC.iter().map(|s| (*s).into()).collect())
+    }
+
+    pub fn cjk() -> Result<Charset> {
+        Charset::new("cjk", CJK.iter().map(|s| (*s).into()).collect())
+    }
+
+    pub fn extended_ascii() -> Result<Charset> {
+        Charset::new(
+            "extended-ascii",
+            EXTENDED_ASCII.iter().map(|s| (*s).into()).collect(),
+        )
+    }
+
+    /// Named preset lookup.
     pub fn by_name(name: &str) -> Option<Result<Charset>> {
         match name {
             "standard" => Some(standard()),
             "dense" => Some(dense()),
             "blocks" => Some(blocks()),
+            "cyrillic" => Some(cyrillic()),
+            "cjk" => Some(cjk()),
+            "extended-ascii" => Some(extended_ascii()),
             _ => None,
         }
     }
@@ -137,10 +167,43 @@ mod tests {
 
     #[test]
     fn presets_load_and_cap_respected() {
-        for name in ["standard", "dense", "blocks"] {
+        for name in [
+            "standard",
+            "dense",
+            "blocks",
+            "cyrillic",
+            "cjk",
+            "extended-ascii",
+        ] {
             let cs = presets::by_name(name).unwrap().unwrap();
             assert_eq!(cs.name, name);
             assert!((2..=MAX_CHARSET_LEN).contains(&cs.len()));
+        }
+    }
+
+    #[test]
+    fn multilingual_ramps_are_dark_to_light() {
+        // Darkest endpoint is the heaviest glyph, lightest is space.
+        assert_eq!(presets::cyrillic().unwrap().glyph_for_luminance(0.0), "Ж");
+        assert_eq!(presets::cyrillic().unwrap().glyph_for_luminance(255.0), " ");
+        assert_eq!(presets::cjk().unwrap().glyph_for_luminance(0.0), "國");
+        assert_eq!(presets::cjk().unwrap().glyph_for_luminance(255.0), " ");
+        let ext = presets::extended_ascii().unwrap();
+        assert_eq!(ext.glyph_for_luminance(0.0), "█");
+        assert_eq!(ext.glyph_for_luminance(255.0), ".");
+    }
+
+    #[test]
+    fn multilingual_glyphs_are_single_graphemes() {
+        for cs in [
+            presets::cyrillic().unwrap(),
+            presets::cjk().unwrap(),
+            presets::extended_ascii().unwrap(),
+        ] {
+            for g in &cs.glyphs {
+                let count = g.graphemes(true).count();
+                assert_eq!(count, 1, "glyph {g:?} is {count} graphemes");
+            }
         }
     }
 
