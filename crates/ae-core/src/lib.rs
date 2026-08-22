@@ -1,8 +1,10 @@
+pub mod decode;
 pub mod error;
 pub mod geometry;
 pub mod image;
 pub mod provenance;
 
+pub use decode::decode_bytes;
 pub use error::{
     decode_failed, invalid_dimensions, rendering, resource_limit, serialization,
     unsupported_format, AeError, Result,

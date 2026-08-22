@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::error::{invalid_dimensions, resource_limit, AeError, Result};
+use crate::error::{invalid_dimensions, resource_limit, Result};
 use crate::geometry::HalfOpenBounds;
 
 /// Hard input ceilings enforced before any large allocation.
@@ -220,6 +220,7 @@ impl Image {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AeError;
 
     #[test]
     fn default_limits_match_plan() {
