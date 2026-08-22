@@ -133,27 +133,57 @@ ae <command> <image> [options]
 
 | Command | Purpose | Example |
 |---------|---------|---------|
-| `inspect` | Orchestrated overview | `ae inspect photo.png` |
+| `inspect` | Orchestrated overview: regions, relations, render, mapping | `ae inspect photo.png --width 60` |
 | `render` | ASCII/blocks rendering | `ae render photo.png --renderer ascii --width 100` |
-| `region` | Extract specific area | `ae region photo.png r3` |
-| `zoom` | Targeted crop + resample | `ae zoom photo.png --region r3 --level 2` |
-| `geometry` | Spatial evidence | `ae geometry photo.png --format json` |
-| `capabilities` | Feature discovery | `ae capabilities --format json` |
+| `geometry` | All detected regions + 7 formal spatial relations | `ae geometry photo.png --format json` |
+| `region` | Extract area by `--box x,y,w,h` or `--region id`, with provenance | `ae region photo.png --box 24,16,32,16` |
+| `zoom` | Crop + spatial-allocation resample (1×/2×/4×/8×) | `ae zoom photo.png --box 0,0,64,64 --level 2` |
+| `capabilities` | Feature discovery for agents | `ae capabilities --format json` |
 
-### Options
+All commands accept `-` as the image path (piped binary stdin), support
+`--format text|json`, and write versioned JSON schemas
+(`agent-eye.scene.v1`, `agent-eye.render.v1`, `agent-eye.geometry.v1`,
+`agent-eye.region.v1`, `agent-eye.zoom.v1`,
+`agent-eye.capabilities.v1`). Every JSON output carries a SHA-256
+`provenance.source_hash` of the original bytes plus the affine
+`mapping` back to source pixels.
+
+### render options
 
 | Flag | Values | Default | Description |
 |------|--------|---------|-------------|
-| `--format` | `text`, `json` | `text` | Output serialization |
 | `--renderer` | `ascii`, `blocks` | `ascii` | Rendering engine |
 | `--width` | `N` | `100` | Output width in characters |
-| `--region` | `id` | — | Target specific region |
-| `--box` | `x,y,w,h` | — | Target bounding box |
-| `--level` | `0-3` | `0` | Zoom scale (1×, 2×, 4×, 8×) |
-| `--invert` | — | off | Invert luminance |
-| `--charset` | `string` | — | Custom character ramp |
-| `--output` | `file` | stdout | Write to file |
-| `--quiet` | — | off | Suppress diagnostics |
+| `--height` | `N` | derived | Output rows (else width ÷ aspect) |
+| `--aspect` | float | `0.5` | Terminal-cell correction; `--aspect 1.0` = square |
+| `--invert` | flag | off | Flip luminance→glyph mapping |
+| `--charset` | preset or string | renderer default | `standard`, `dense`, `blocks`, `cyrillic`, `cjk`, `extended-ascii`, or custom ramp |
+| `--grayscale` | flag | off | ANSI-256 grayscale presentation (human display) |
+| `--full` | flag | off | Fit to terminal size (overrides `--width`) |
+| `--format` | `text`, `json` | `text` | Output serialization |
+| `--output` | `file` | stdout | Write to file (`--force` to overwrite) |
+
+### region / zoom options
+
+| Flag | Applies to | Description |
+|------|------------|-------------|
+| `--box x,y,w,h` | `region`, `zoom` | Source-pixel window (half-open) |
+| `--region id` | `region` | Detected region id from `ae geometry` |
+| `--level 0-3` | `zoom` | Spatial allocation scale: same output grid from a smaller window |
+
+### capabilities output
+
+```bash
+$ ae capabilities
+ae 0.1.0 — agent-eye capabilities
+input:         png, jpeg, webp, stdin
+renderers:     ascii, blocks
+commands:      render, capabilities
+output:        text, json
+```
+
+(The `commands:` list grows as subcommands ship; see `--format json` for
+the machine-readable contract including resource limits.)
 
 ---
 
@@ -173,23 +203,29 @@ ae <command> <image> [options]
 ## Architecture
 
 ```text
-ae-cli (orchestration)
+ae-cli (orchestration only)
   │
   ├── ae-core
-  │     ├── image (decode, pixel buffer)
-  │     ├── geometry (spatial relations)
-  │     ├── sampling (block averaging)
-  │     ├── transforms (resize, crop)
-  │     ├── analysis (luminance, edges)
-  │     ├── regions (candidate segmentation)
-  │     ├── provenance (source tracking)
-  │     └── mapping (affine coordinate transform)
+  │     ├── image       (canonical Image/PixelBuffer, Limits)
+  │     ├── decode      (PNG/JPEG/WebP, bomb guard)
+  │     ├── analysis    (Rec.709 luminance, Sobel edges, contrast,
+  │     │                chroma variance, VisualComplexity)
+  │     ├── geometry    (HalfOpenBounds, CoordinateTransform)
+  │     ├── regions     (CandidateRegion contract + detection heuristic)
+  │     ├── relations   (7 formal spatial relations)
+  │     └── provenance  (SHA-256 source tracking)
   │
   └── ae-render
-        ├── ASCII renderer
-        ├── blocks renderer
-        └── charset system
+        ├── charset     (grapheme-safe presets: standard, dense, blocks,
+        │                cyrillic, cjk, extended-ascii + custom ramps)
+        ├── config      (RenderConfig, RendererType, ColorMode)
+        ├── sampling    (block averaging with aspect correction)
+        └── render      (ASCII + blocks engines → RenderedGrid)
 ```
+
+Benchmarks live in `bench/` (agent evaluation harness, progressive-
+inspection probe, negative-capability checks) and per-crate `benches/`
+(decode, region detection, full performance suite).
 
 Dependency flows one way. Core does not know about CLI. No LLM dependency anywhere.
 
@@ -202,21 +238,32 @@ All commands support `--format json`. Every output includes `schema_version` for
 ```json
 {
   "schema_version": "agent-eye.scene.v1",
-  "image": { "width": 1440, "height": 900 },
+  "image": { "width": 64, "height": 48, "format": "png" },
+  "provenance": {
+    "source_hash": "85db0b2c…e43ec546",
+    "source_bounds": [0, 0, 64, 48]
+  },
   "regions": [
-    { "id": "r1", "bounds": [0, 0, 1440, 96], "area": 0.07, "edge_density": 0.42 }
+    { "id": "r1", "bounds": [1, 7, 17, 9], "area": 0.01,
+      "edge_density": 1.0, "color_variance": 0.0 }
   ],
   "relations": [
-    { "type": "left_of", "a": "r2", "b": "r3" }
+    { "type": "left_of", "a": "r1", "b": "r2" }
   ],
-  "representation": { "renderer": "ascii", "data": "..." },
+  "representation": { "renderer": "ascii", "charset": "standard", "data": "..." },
   "mapping": {
-    "source_bounds": [0, 0, 1440, 900],
-    "scale_x": 18.0, "scale_y": 16.67,
+    "source_bounds": [0, 0, 64, 48],
+    "output_width": 64, "output_height": 48,
+    "scale_x": 1.0, "scale_y": 1.0,
     "offset_x": 0.0, "offset_y": 0.0
   }
 }
 ```
+
+Schemas are versioned (`agent-eye.{scene,render,geometry,region,zoom,capabilities}.v1`).
+`source_hash` is the SHA-256 of the original encoded bytes — any output can
+be traced back to the exact input file. `mapping` is the affine transform
+(`source = output × scale + offset`) for coordinate map-back.
 
 No semantic labels. No `importance`, `confidence`, `description`. Pure geometric evidence.
 
@@ -237,6 +284,11 @@ LLM + ae inspect:       Y% accuracy / N tokens
 LLM + ae progressive:   Z% accuracy / N tokens
 Vision model:           upper bound
 ```
+
+The harness is implemented: `bench/agent-eval.sh` runs the full mode
+matrix, `bench/progressive-inspection.sh` tests the core hypothesis,
+`bench/negative-capability.sh` proves uncertainty is structural, and
+`bench/GATE-DECISION.md` records the Phase 7 gate outcome.
 
 ---
 

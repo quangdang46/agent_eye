@@ -1,4 +1,4 @@
-//! Analysis primitives over the canonical [`Image`]/[`Pixel`] types.
+//! Analysis primitives over the canonical image types (`crate::image`):
 //!
 //! Luminance here is **analysis, not presentation**: Rec. 709 coefficients,
 //! always computed internally (plan §7). A grayscale *output* mode is a

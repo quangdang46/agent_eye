@@ -14,8 +14,8 @@
 //! * `bounds` are half-open `[x1, y1) × [y1, y2)` source pixels; provenance
 //!   to the original image is exact by construction.
 //! * Metrics are pure functions of the pixel data inside `bounds`:
-//!   `area` = w·h / total_pixels ∈ [0,1], `edge_density` = mean Sobel
-//!   strength /255 ∈ [0,1], `color_variance` = chroma variance ∈ [0,1].
+//!   `area` = w·h / total_pixels ∈ \[0,1\], `edge_density` = mean Sobel
+//!   strength /255 ∈ \[0,1\], `color_variance` = chroma variance ∈ \[0,1\].
 //! * Stability requirement: the same input bytes and config MUST produce
 //!   byte-identical regions across runs (asserted 10× in tests).
 //! * Forbidden forever: labels, classes, confidence scores, importance,

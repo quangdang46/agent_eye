@@ -2,7 +2,7 @@
 //! `--invert`, `--charset` CLI surface, plan §7).
 //!
 //! [`RenderConfig`] here is the *complete* request shape; the render engine
-//! ([`crate::render`]) consumes it. [`ColorMode`] is declared now so the
+//! (`crate::render::render`) consumes it. [`ColorMode`] is declared now so the
 //! config surface is stable — v1 only implements `None` (plain text); the
 //! others are Phase 3/8 presentation modes and are rejected by name until
 //! implemented (no silent no-ops).
