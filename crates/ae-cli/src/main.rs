@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 
 use ae_core::decode::decode_bytes;
 use ae_core::image::Limits;
-use ae_render::config::RenderConfig;
+use ae_render::config::{ColorMode, RenderConfig};
 use ae_render::render::RenderedGrid;
 use ae_render::{render, Charset};
 
@@ -64,6 +64,10 @@ enum Command {
         /// Flip luminance mapping: dark source → light glyphs.
         #[arg(long, default_value_t = false)]
         invert: bool,
+        /// ANSI 256 grayscale presentation (human display; analysis is
+        /// always internal luminance).
+        #[arg(long, default_value_t = false)]
+        grayscale: bool,
         /// Charset: preset name (`standard|dense|blocks`) or custom ramp string.
         #[arg(long)]
         charset: Option<String>,
@@ -112,6 +116,7 @@ fn main() {
             height,
             aspect,
             invert,
+            grayscale,
             charset,
             format,
             output,
@@ -123,6 +128,7 @@ fn main() {
             height,
             aspect,
             invert,
+            grayscale,
             charset,
             format,
             output,
@@ -207,6 +213,7 @@ struct RenderSpec {
     height: Option<u32>,
     aspect: f32,
     invert: bool,
+    grayscale: bool,
     charset: Option<String>,
     format: FormatArg,
     /// Write result here instead of stdout.
@@ -266,7 +273,11 @@ fn cmd_render(spec: RenderSpec) -> i32 {
         aspect_ratio: spec.aspect,
         invert: spec.invert,
         charset_override: spec.charset.clone(),
-        color: Default::default(),
+        color: if spec.grayscale {
+            ColorMode::Grayscale
+        } else {
+            ColorMode::None
+        },
     };
     if let Err(e) = cfg.validate() {
         return fail(&e.to_string());

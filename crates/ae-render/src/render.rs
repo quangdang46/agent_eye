@@ -6,7 +6,7 @@
 //! Determinism contract: same image + same config ⇒ byte-identical output.
 
 use crate::charset::{presets, Charset};
-use crate::config::{RenderConfig, RendererType};
+use crate::config::{ColorMode, RenderConfig, RendererType};
 use crate::sampling::{sample_blocks, Block};
 use ae_core::image::Image;
 use ae_core::Result;
@@ -16,6 +16,8 @@ use ae_core::Result;
 pub struct RenderedGrid {
     pub renderer: RendererType,
     pub charset_name: String,
+    /// Presentation mode the grid was rendered with.
+    pub color: ColorMode,
     /// Row-major; each entry is one glyph cluster (may be multi-codepoint).
     pub rows: Vec<Vec<String>>,
 }
@@ -60,7 +62,19 @@ pub fn render(img: &Image, cfg: &RenderConfig, charset: &Charset) -> Result<Rend
     let mut rows: Vec<Vec<String>> = Vec::with_capacity(blocks.len() / cols.max(1));
     let mut row = Vec::with_capacity(cols);
     for b in &blocks {
-        row.push(effective.glyph_for_luminance(b.luminance()).to_owned());
+        let lum = b.luminance();
+        let glyph = effective.glyph_for_luminance(lum);
+        let cell = match cfg.color {
+            ColorMode::None | ColorMode::TrueColor => glyph.to_owned(),
+            // Presentation-only grayscale: ANSI 256 gray ramp wrapped around
+            // the same glyph. Analysis luminance was already used above.
+            ColorMode::Grayscale => {
+                let level = (lum / 255.0).clamp(0.0, 1.0);
+                let shade = 232 + (level * 23.0).round() as u8; // ANSI 232..=255
+                format!("\u{1b}[38;5;{shade}m{glyph}\u{1b}[0m")
+            }
+        };
+        row.push(cell);
         if row.len() == cols {
             rows.push(std::mem::replace(&mut row, Vec::with_capacity(cols)));
         }
@@ -68,6 +82,7 @@ pub fn render(img: &Image, cfg: &RenderConfig, charset: &Charset) -> Result<Rend
     Ok(RenderedGrid {
         renderer: cfg.renderer,
         charset_name: effective.name,
+        color: cfg.color,
         rows,
     })
 }
@@ -174,6 +189,39 @@ mod tests {
         // Inverted charset maps luminance 0 → lightest glyph (" ").
         assert_eq!(g.rows[0][0], " ");
         assert_eq!(g.charset_name, "standard-inverted");
+    }
+
+    #[test]
+    fn grayscale_wraps_glyph_in_ansi_shade() {
+        let black = solid_img(16, 16, 0);
+        let white = solid_img(16, 16, 255);
+        let cfg = RenderConfig {
+            width: 4,
+            height: Some(2),
+            color: ColorMode::Grayscale,
+            ..Default::default()
+        };
+        let dark = render_ascii(&black, &cfg).unwrap();
+        let light = render_ascii(&white, &cfg).unwrap();
+        // Darkest ANSI gray ramp entry for black, lightest for white; the
+        // glyph itself is unchanged inside the escape wrapper.
+        assert!(dark.rows[0][0].contains("\u{1b}[38;5;232m"));
+        assert!(dark.rows[0][0].ends_with("m@\u{1b}[0m"));
+        assert!(light.rows[0][0].contains("\u{1b}[38;5;255m"));
+        assert_eq!(dark.color, ColorMode::Grayscale);
+    }
+
+    #[test]
+    fn plain_mode_has_no_escape_sequences() {
+        let img = gradient_img(32, 32);
+        let cfg = RenderConfig {
+            width: 8,
+            height: Some(4),
+            ..Default::default()
+        };
+        let g = render_ascii(&img, &cfg).unwrap();
+        assert!(g.to_text().bytes().all(|b| b != 0x1b));
+        assert_eq!(g.color, ColorMode::None);
     }
 
     #[test]

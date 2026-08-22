@@ -87,9 +87,9 @@ impl ColorMode {
         }
     }
 
-    /// v1 support matrix: only `None` renders today.
+    /// v1 support matrix: plain text + grayscale ANSI. TrueColor is Phase 8.
     pub fn supported_in_v1(self) -> bool {
-        matches!(self, Self::None)
+        matches!(self, Self::None | Self::Grayscale)
     }
 }
 
@@ -235,7 +235,7 @@ mod tests {
         assert_eq!(ColorMode::parse("truecolor").unwrap(), ColorMode::TrueColor);
         assert!(ColorMode::parse("rgb").is_err());
         assert!(ColorMode::None.supported_in_v1());
-        assert!(!ColorMode::Grayscale.supported_in_v1());
+        assert!(ColorMode::Grayscale.supported_in_v1());
         assert!(!ColorMode::TrueColor.supported_in_v1());
     }
 
@@ -264,7 +264,7 @@ mod tests {
         c.color = ColorMode::TrueColor;
         assert!(c.validate().is_err());
         c.color = ColorMode::Grayscale;
-        assert!(c.validate().is_err());
+        assert!(c.validate().is_ok()); // presentation mode shipped in v1
     }
 
     #[test]
