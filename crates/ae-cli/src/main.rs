@@ -20,8 +20,8 @@ fn set_stdin_binary() {
 fn set_stdin_binary() {}
 
 use clap::{Parser, Subcommand, ValueEnum};
-use std::io::Read;
-use std::path::PathBuf;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 
 use ae_core::decode::decode_bytes;
 use ae_core::image::Limits;
@@ -70,6 +70,12 @@ enum Command {
         /// Output serialization.
         #[arg(long, value_enum, default_value_t = FormatArg::Text)]
         format: FormatArg,
+        /// Write result to file instead of stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Overwrite `--output` file if it exists.
+        #[arg(long, default_value_t = false)]
+        force: bool,
     },
 }
 
@@ -108,6 +114,8 @@ fn main() {
             invert,
             charset,
             format,
+            output,
+            force,
         } => cmd_render(RenderSpec {
             image,
             renderer: renderer.into(),
@@ -117,6 +125,8 @@ fn main() {
             invert,
             charset,
             format,
+            output,
+            force,
         }),
     };
     std::process::exit(exit_code);
@@ -199,6 +209,10 @@ struct RenderSpec {
     invert: bool,
     charset: Option<String>,
     format: FormatArg,
+    /// Write result here instead of stdout.
+    output: Option<PathBuf>,
+    /// Overwrite an existing `output` file.
+    force: bool,
 }
 
 /// `agent-eye.render.v1` JSON payload — geometry + provenance only.
@@ -266,9 +280,8 @@ fn cmd_render(spec: RenderSpec) -> i32 {
         Ok(g) => g,
         Err(e) => return fail(&e.to_string()),
     };
-
-    match spec.format {
-        FormatArg::Text => println!("{}", grid.to_text()),
+    let body = match spec.format {
+        FormatArg::Text => grid.to_text(),
         FormatArg::Json => {
             let out_w = grid.width().max(1);
             let out_h = grid.height().max(1);
@@ -295,12 +308,41 @@ fn cmd_render(spec: RenderSpec) -> i32 {
                 },
             };
             match serde_json::to_string_pretty(&payload) {
-                Ok(s) => println!("{s}"),
+                Ok(s) => s,
                 Err(e) => return fail(&e.to_string()),
             }
         }
+    };
+    emit(&body, spec.output.as_deref(), spec.force)
+}
+
+/// Writes `body` to `path` (refusing to clobber without `force`) or stdout.
+fn emit(body: &str, path: Option<&Path>, force: bool) -> i32 {
+    match path {
+        None => {
+            println!("{body}");
+            0
+        }
+        Some(p) => {
+            if p.exists() && !force {
+                return fail(&format!(
+                    "{} already exists (use --force to overwrite)",
+                    p.display()
+                ));
+            }
+            let opened = std::fs::File::create(p).map_err(|e| e.to_string());
+            match opened.and_then(|f| {
+                let mut w = std::io::BufWriter::new(f);
+                w.write_all(body.as_bytes())
+                    .and_then(|()| w.write_all(b"\n"))
+                    .and_then(|()| w.flush())
+                    .map_err(|e| e.to_string())
+            }) {
+                Ok(()) => 0,
+                Err(e) => fail(&format!("{}: {e}", p.display())),
+            }
+        }
     }
-    0
 }
 
 fn read_input(path: &PathBuf) -> Result<Vec<u8>, String> {
