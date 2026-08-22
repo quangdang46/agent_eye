@@ -1,0 +1,44 @@
+{
+  "results": {
+    "baseline": {
+      "accuracy": 0.0,
+      "tokens_per_case": 0,
+      "correct": 0,
+      "of": 5,
+      "negative_honest": true
+    },
+    "ascii": {
+      "accuracy": 40.0,
+      "tokens_per_case": 608,
+      "correct": 2,
+      "of": 5,
+      "negative_honest": true
+    },
+    "blocks": {
+      "accuracy": 40.0,
+      "tokens_per_case": 1143,
+      "correct": 2,
+      "of": 5,
+      "negative_honest": true
+    },
+    "ae-inspect": {
+      "accuracy": 80.0,
+      "tokens_per_case": 1996,
+      "correct": 4,
+      "of": 5,
+      "negative_honest": true
+    },
+    "ae-progressive": {
+      "accuracy": 80.0,
+      "tokens_per_case": 792,
+      "correct": 4,
+      "of": 5,
+      "negative_honest": true
+    }
+  },
+  "gate": {
+    "cond1_pass": true,
+    "cond2_pass": false,
+    "verdict": "CONTINUE"
+  }
+}

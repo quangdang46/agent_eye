@@ -1,0 +1,20 @@
+{
+  "001-ui": {
+    "spatial": "Dark-gray header bar across the entire top (y<8)",
+    "structure": "4 distinct: header bar, left sidebar, blue content block, white bg",
+    "geometry": "header bar (full width) \u2192 sidebar left + blue content center-right \u2192 white below",
+    "negative": "no text \u2014 pure geometric blocks"
+  },
+  "002-diagram": {
+    "structure": "3 distinct: white box A (top-left), white box B (bottom-right), black connector line",
+    "detail": null,
+    "counting": "1 connector line crossing between the two boxes"
+  },
+  "003-button": {
+    "detail": "No text glyphs \u2014 it's a solid bright square on black background",
+    "counting": "4 edges bounding the bright central region"
+  },
+  "004-screenshot": {
+    "geometry": "top\u2192bottom: dark title bar \u2192 3 light horizontal stripes of decreasing width on dark background"
+  }
+}

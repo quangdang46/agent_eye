@@ -1,0 +1,166 @@
+{
+  "schema_version": "agent-eye.scene.v1",
+  "image": {
+    "width": 64,
+    "height": 48,
+    "format": "png"
+  },
+  "provenance": {
+    "source_hash": "dab549aa7a05e3821f41611db95bd849009b6b8ed3a985bb06db89a68114951c",
+    "source_bounds": [
+      0,
+      0,
+      64,
+      48
+    ]
+  },
+  "regions": [
+    {
+      "id": "r1",
+      "bounds": [
+        1,
+        7,
+        17,
+        9
+      ],
+      "area": 0.010416667,
+      "edge_density": 1.0,
+      "color_variance": 0.00038296568627450974
+    },
+    {
+      "id": "r2",
+      "bounds": [
+        23,
+        7,
+        57,
+        9
+      ],
+      "area": 0.022135416,
+      "edge_density": 1.0,
+      "color_variance": 0.0
+    },
+    {
+      "id": "r3",
+      "bounds": [
+        1,
+        15,
+        17,
+        33
+      ],
+      "area": 0.09375,
+      "edge_density": 0.08681962,
+      "color_variance": 0.00009010957324106139
+    },
+    {
+      "id": "r4",
+      "bounds": [
+        23,
+        15,
+        57,
+        33
+      ],
+      "area": 0.19921875,
+      "edge_density": 0.31298247,
+      "color_variance": 0.04688043349422387
+    },
+    {
+      "id": "r5",
+      "bounds": [
+        1,
+        39,
+        17,
+        41
+      ],
+      "area": 0.010416667,
+      "edge_density": 0.6727511,
+      "color_variance": 0.00038296568627450974
+    }
+  ],
+  "relations": [
+    {
+      "type": "left_of",
+      "a": "r1",
+      "b": "r2"
+    },
+    {
+      "type": "left_of",
+      "a": "r1",
+      "b": "r4"
+    },
+    {
+      "type": "left_of",
+      "a": "r3",
+      "b": "r4"
+    },
+    {
+      "type": "right_of",
+      "a": "r2",
+      "b": "r3"
+    },
+    {
+      "type": "right_of",
+      "a": "r2",
+      "b": "r5"
+    },
+    {
+      "type": "right_of",
+      "a": "r4",
+      "b": "r5"
+    },
+    {
+      "type": "above",
+      "a": "r1",
+      "b": "r3"
+    },
+    {
+      "type": "above",
+      "a": "r1",
+      "b": "r4"
+    },
+    {
+      "type": "above",
+      "a": "r1",
+      "b": "r5"
+    },
+    {
+      "type": "above",
+      "a": "r2",
+      "b": "r3"
+    },
+    {
+      "type": "above",
+      "a": "r2",
+      "b": "r4"
+    },
+    {
+      "type": "above",
+      "a": "r2",
+      "b": "r5"
+    },
+    {
+      "type": "above",
+      "a": "r3",
+      "b": "r5"
+    },
+    {
+      "type": "above",
+      "a": "r4",
+      "b": "r5"
+    }
+  ],
+  "representation": null,
+  "mapping": {
+    "source_bounds": [
+      0,
+      0,
+      64,
+      48
+    ],
+    "output_width": 64,
+    "output_height": 48,
+    "scale_x": 1.0,
+    "scale_y": 1.0,
+    "offset_x": 0.0,
+    "offset_y": 0.0
+  }
+}
