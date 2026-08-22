@@ -57,6 +57,7 @@ impl RendererType {
 /// render engine rejects them with a clear error instead of silently
 /// downgrading.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 pub enum ColorMode {
     /// Plain text — agent default, no escape sequences.
     #[default]
@@ -87,9 +88,9 @@ impl ColorMode {
         }
     }
 
-    /// v1 support matrix: plain text + grayscale ANSI. TrueColor is Phase 8.
+    /// Support matrix: plain text + grayscale + truecolor presentation.
     pub fn supported_in_v1(self) -> bool {
-        matches!(self, Self::None | Self::Grayscale)
+        matches!(self, Self::None | Self::Grayscale | Self::TrueColor)
     }
 }
 
@@ -236,7 +237,7 @@ mod tests {
         assert!(ColorMode::parse("rgb").is_err());
         assert!(ColorMode::None.supported_in_v1());
         assert!(ColorMode::Grayscale.supported_in_v1());
-        assert!(!ColorMode::TrueColor.supported_in_v1());
+        assert!(ColorMode::TrueColor.supported_in_v1());
     }
 
     #[test]
@@ -259,12 +260,14 @@ mod tests {
     }
 
     #[test]
-    fn validate_rejects_unsupported_color_modes() {
+    fn validate_accepts_all_shipped_color_modes() {
         let mut c = RenderConfig::ascii(10);
         c.color = ColorMode::TrueColor;
-        assert!(c.validate().is_err());
+        assert!(c.validate().is_ok()); // compatibility mode shipped
         c.color = ColorMode::Grayscale;
-        assert!(c.validate().is_ok()); // presentation mode shipped in v1
+        assert!(c.validate().is_ok());
+        c.color = ColorMode::None;
+        assert!(c.validate().is_ok());
     }
 
     #[test]

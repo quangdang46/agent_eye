@@ -61,19 +61,41 @@ pub fn render(img: &Image, cfg: &RenderConfig, charset: &Charset) -> Result<Rend
     let cols = effective_row_width(&blocks, img, cfg);
     let mut rows: Vec<Vec<String>> = Vec::with_capacity(blocks.len() / cols.max(1));
     let mut row = Vec::with_capacity(cols);
+    // Style cache: emit an escape only when the color actually changes.
+    // Flat-color regions collapse from per-cell escapes to a handful of
+    // transitions (lesson from RASCII: ~1800% output reduction there).
+    let mut last_style: Option<String> = None;
+    let mut last_glyph: &str = "";
     for b in &blocks {
         let lum = b.luminance();
         let glyph = effective.glyph_for_luminance(lum);
         let cell = match cfg.color {
-            ColorMode::None | ColorMode::TrueColor => glyph.to_owned(),
-            // Presentation-only grayscale: ANSI 256 gray ramp wrapped around
-            // the same glyph. Analysis luminance was already used above.
+            ColorMode::None => glyph.to_owned(),
             ColorMode::Grayscale => {
                 let level = (lum / 255.0).clamp(0.0, 1.0);
                 let shade = 232 + (level * 23.0).round() as u8; // ANSI 232..=255
-                format!("\u{1b}[38;5;{shade}m{glyph}\u{1b}[0m")
+                let style = format!("\u{1b}[38;5;{shade}m");
+                if Some(&style) == last_style.as_ref() && glyph == last_glyph {
+                    String::new() // repeat: same glyph, same color
+                } else {
+                    last_style = Some(style.clone());
+                    format!("{style}{glyph}\u{1b}[0m")
+                }
+            }
+            ColorMode::TrueColor => {
+                // Block-average RGB IS the pixel-true color at this scale —
+                // no quantization beyond the sampling itself.
+                let p = b.pixel;
+                let style = format!("\u{1b}[38;2;{};{};{}m", p.r, p.g, p.b);
+                if Some(&style) == last_style.as_ref() && glyph == last_glyph {
+                    String::new()
+                } else {
+                    last_style = Some(style.clone());
+                    format!("{style}{glyph}\u{1b}[0m")
+                }
             }
         };
+        last_glyph = glyph;
         row.push(cell);
         if row.len() == cols {
             rows.push(std::mem::replace(&mut row, Vec::with_capacity(cols)));
@@ -222,6 +244,45 @@ mod tests {
         let g = render_ascii(&img, &cfg).unwrap();
         assert!(g.to_text().bytes().all(|b| b != 0x1b));
         assert_eq!(g.color, ColorMode::None);
+    }
+
+    #[test]
+    fn truecolor_wraps_glyph_in_rgb_escape() {
+        // Pure red image → \x1b[38;2;255;0;0m prefix.
+        let dims = Dimensions::new(8, 8).unwrap();
+        let buf = PixelBuffer::from_vec(dims, vec![ae_core::image::Pixel::opaque(255, 0, 0); 64])
+            .unwrap();
+        let img = Image::new(dims, buf, ImageMetadata::default()).unwrap();
+        let cfg = RenderConfig {
+            width: 4,
+            height: Some(2),
+            color: ColorMode::TrueColor,
+            ..Default::default()
+        };
+        let g = render_ascii(&img, &cfg).unwrap();
+        assert!(g.rows[0][0].starts_with("\u{1b}[38;2;255;0;0m#"));
+        assert_eq!(g.color, ColorMode::TrueColor);
+    }
+
+    #[test]
+    fn style_cache_collapses_flat_regions() {
+        // A solid image renders every cell identically: with caching the
+        // first cell carries the escape, all repeats are empty strings.
+        let img = solid_img(32, 32, 200);
+        let cfg = RenderConfig {
+            width: 8,
+            height: Some(4),
+            color: ColorMode::Grayscale,
+            ..Default::default()
+        };
+        let g = render_ascii(&img, &cfg).unwrap();
+        let flat: Vec<&String> = g.rows.iter().flatten().collect();
+        let escapes = flat.iter().filter(|c| c.contains("\u{1b}")).count();
+        assert_eq!(
+            escapes, 1,
+            "flat region must emit exactly one escape sequence"
+        );
+        assert!(flat[1..].iter().all(|c| c.is_empty()));
     }
 
     #[test]

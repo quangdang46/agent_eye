@@ -144,9 +144,13 @@ enum Command {
         /// Flip luminance mapping: dark source → light glyphs.
         #[arg(long, default_value_t = false)]
         invert: bool,
+        /// Color presentation: `none` (agent default), `grayscale`,
+        /// `true-color` (per-cell RGB escapes; human display).
+        #[arg(long, default_value = "none")]
+        color: ColorMode,
         /// ANSI 256 grayscale presentation (human display; analysis is
         /// always internal luminance).
-        #[arg(long, default_value_t = false)]
+        #[arg(long, default_value_t = false, conflicts_with = "color")]
         grayscale: bool,
         /// Charset: preset name (`standard|dense|blocks`) or custom ramp string.
         #[arg(long)]
@@ -258,6 +262,7 @@ fn main() {
             height,
             aspect,
             invert,
+            color,
             grayscale,
             charset,
             full,
@@ -274,6 +279,12 @@ fn main() {
                     height = Some(rows.0 as u32);
                 }
             }
+            // --grayscale is shorthand for --color grayscale.
+            let color = if grayscale {
+                ColorMode::Grayscale
+            } else {
+                color
+            };
             cmd_render(RenderSpec {
                 image,
                 renderer: renderer.into(),
@@ -281,7 +292,7 @@ fn main() {
                 height,
                 aspect,
                 invert,
-                grayscale,
+                color,
                 charset,
                 format,
                 output,
@@ -909,7 +920,7 @@ struct RenderSpec {
     height: Option<u32>,
     aspect: f32,
     invert: bool,
-    grayscale: bool,
+    color: ColorMode,
     charset: Option<String>,
     format: FormatArg,
     /// Write result here instead of stdout.
@@ -997,11 +1008,7 @@ fn cmd_render(spec: RenderSpec) -> i32 {
         aspect_ratio: spec.aspect,
         invert: spec.invert,
         charset_override: spec.charset.clone(),
-        color: if spec.grayscale {
-            ColorMode::Grayscale
-        } else {
-            ColorMode::None
-        },
+        color: spec.color,
     };
     if let Err(e) = cfg.validate() {
         return fail(&e.to_string());

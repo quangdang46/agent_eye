@@ -13,6 +13,11 @@ ae-core = { workspace = true }
 unicode-segmentation = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
+clap = { workspace = true, optional = true }
+
+[features]
+# Enables clap::ValueEnum on CLI-facing enums (used by ae-cli).
+cli = ["dep:clap"]
 
 [dev-dependencies]
 proptest = { workspace = true }
