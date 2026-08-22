@@ -71,6 +71,10 @@ enum Command {
         /// Charset: preset name (`standard|dense|blocks`) or custom ramp string.
         #[arg(long)]
         charset: Option<String>,
+        /// Fit output to terminal width, preserving aspect (overrides
+        /// --width; agents should prefer explicit --width).
+        #[arg(long, default_value_t = false)]
+        full: bool,
         /// Output serialization.
         #[arg(long, value_enum, default_value_t = FormatArg::Text)]
         format: FormatArg,
@@ -103,7 +107,6 @@ enum FormatArg {
     Text,
     Json,
 }
-
 fn main() {
     set_stdin_binary();
     let cli = Cli::parse();
@@ -118,22 +121,34 @@ fn main() {
             invert,
             grayscale,
             charset,
+            full,
             format,
             output,
             force,
-        } => cmd_render(RenderSpec {
-            image,
-            renderer: renderer.into(),
-            width,
-            height,
-            aspect,
-            invert,
-            grayscale,
-            charset,
-            format,
-            output,
-            force,
-        }),
+        } => {
+            let mut width = width;
+            let mut height = height;
+            if full {
+                // --full overrides explicit dims with the terminal size.
+                if let Some((cols, rows)) = terminal_size::terminal_size() {
+                    width = cols.0 as u32;
+                    height = Some(rows.0 as u32);
+                }
+            }
+            cmd_render(RenderSpec {
+                image,
+                renderer: renderer.into(),
+                width,
+                height,
+                aspect,
+                invert,
+                grayscale,
+                charset,
+                format,
+                output,
+                force,
+            })
+        }
     };
     std::process::exit(exit_code);
 }
