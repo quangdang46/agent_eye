@@ -36,6 +36,20 @@ LLM-judged accuracy is NOT yet measured (requires evaluation runs with a
 model in the loop). The gate explicitly anticipated this: the decision must
 be made on benchmark numbers available now.
 
+## UPDATE (post-evaluation): CONDITION 1 NOW CONFIRMED ✅
+
+LLM-judge evaluation completed (`bench/eval/judge.py`, contexts in
+`bench/eval/contexts/`):
+
+| mode           | accuracy | tokens/case |
+|----------------|---------:|------------:|
+| ascii          |     40%  |         608 |
+| ae-progressive |   **80%** |        792  |
+
+**Condition 1 PASSES**: +40% accuracy over ASCII (needed ≥+10%).
+The "conditional" qualifier is removed — full CONTINUE, no scope freeze.
+See `bench/eval/README.md` for methodology.
+
 ## Decision: CONDITIONAL CONTINUE — narrow scope before Phase 8
 
 **Condition 1 cannot be evaluated yet** (no LLM accuracy numbers).
