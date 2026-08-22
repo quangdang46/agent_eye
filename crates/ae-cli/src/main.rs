@@ -1,3 +1,24 @@
+//! ae CLI entry: subcommand dispatch + I/O plumbing.
+
+/// Piped-binary stdin on Windows defaults to text mode; switch to binary so
+/// CRLF translation cannot corrupt PNG/JPEG/WebP bytes (no-op elsewhere).
+#[cfg(windows)]
+fn set_stdin_binary() {
+    use std::os::windows::io::AsRawStdin;
+    unsafe {
+        // winapi-style: _setmode(0, _O_BINARY) == 0x8000
+        #[link(name = "ucrt")]
+        extern "C" {
+            fn _setmode(fd: i32, mode: i32) -> i32;
+        }
+        let fd = std::io::stdin().as_raw_stdin() as i32;
+        let _ = _setmode(fd, 0x8000);
+    }
+}
+
+#[cfg(not(windows))]
+fn set_stdin_binary() {}
+
 use clap::{Parser, Subcommand, ValueEnum};
 use std::io::Read;
 use std::path::PathBuf;
@@ -74,6 +95,7 @@ enum FormatArg {
 }
 
 fn main() {
+    set_stdin_binary();
     let cli = Cli::parse();
     let exit_code = match cli.command {
         Command::Capabilities { format } => cmd_capabilities(format),
