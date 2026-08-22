@@ -45,6 +45,26 @@ enum Command {
         #[arg(long, value_enum, default_value_t = FormatArg::Text)]
         format: FormatArg,
     },
+    /// Extract a specific area as a rendered region with full provenance.
+    Region {
+        /// Image path, or `-` for stdin.
+        image: PathBuf,
+        /// Region bounds as x,y,w,h in source pixels (half-open window).
+        #[arg(long, group = "target")]
+        box_: Option<String>,
+        /// Detected region id from `ae geometry` (e.g. r3).
+        #[arg(long, group = "target")]
+        region: Option<String>,
+        /// Output serialization.
+        #[arg(long, value_enum, default_value_t = FormatArg::Text)]
+        format: FormatArg,
+        /// Write result to file instead of stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Overwrite `--output` file if it exists.
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
     /// Render an image as ASCII or Unicode blocks.
     Render {
         /// Image path, or `-` for stdin.
@@ -112,6 +132,21 @@ fn main() {
     let cli = Cli::parse();
     let exit_code = match cli.command {
         Command::Capabilities { format } => cmd_capabilities(format),
+        Command::Region {
+            image,
+            box_,
+            region,
+            format,
+            output,
+            force,
+        } => cmd_region(RegionSpec {
+            image,
+            box_,
+            region,
+            format,
+            output,
+            force,
+        }),
         Command::Render {
             image,
             renderer,
@@ -219,6 +254,189 @@ fn cmd_capabilities(format: FormatArg) -> i32 {
         },
     }
     0
+}
+
+struct RegionSpec {
+    image: PathBuf,
+    box_: Option<String>,
+    region: Option<String>,
+    format: FormatArg,
+    output: Option<PathBuf>,
+    force: bool,
+}
+
+/// `agent-eye.region.v1` payload.
+#[derive(serde::Serialize)]
+struct RegionJsonV1 {
+    schema_version: &'static str,
+    image: ImageInfoOwned,
+    provenance: ProvenanceJson,
+    region: RegionInfo,
+    representation: RepresentationOwned,
+    mapping: MappingInfo,
+}
+
+#[derive(serde::Serialize)]
+struct ImageInfoOwned {
+    width: u32,
+    height: u32,
+    format: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct RepresentationOwned {
+    renderer: &'static str,
+    charset: String,
+    data: String,
+}
+
+#[derive(serde::Serialize)]
+struct RegionInfo {
+    id: String,
+    bounds: [u32; 4],
+    area: f32,
+    edge_density: f32,
+    color_variance: f64,
+}
+
+fn parse_box(s: &str) -> Result<ae_core::geometry::HalfOpenBounds, String> {
+    let parts: Vec<&str> = s.split(',').collect();
+    if parts.len() != 4 {
+        return Err("--box expects x,y,w,h".into());
+    }
+    let nums: Result<Vec<u32>, _> = parts.iter().map(|p| p.trim().parse()).collect();
+    let n = nums.map_err(|e| format!("--box parse failed: {e}"))?;
+    let (x, y, w, h) = (n[0], n[1], n[2], n[3]);
+    if w == 0 || h == 0 {
+        return Err("--box width/height must be > 0".into());
+    }
+    ae_core::geometry::HalfOpenBounds::new(x, y, x + w, y + h)
+        .map_err(|e| format!("--box invalid: {e}"))
+}
+
+fn cmd_region(spec: RegionSpec) -> i32 {
+    let bytes = match read_input(&spec.image) {
+        Ok(b) => b,
+        Err(e) => return fail(&e),
+    };
+    let img = match decode_bytes(&bytes, &Limits::default()) {
+        Ok(i) => i,
+        Err(e) => return fail(&e.to_string()),
+    };
+
+    // Resolve target bounds: explicit --box wins; --region looks up a
+    // detected candidate by id.
+    let bounds = if let Some(bx) = &spec.box_ {
+        match parse_box(bx) {
+            Ok(b) => b,
+            Err(e) => return fail(&e),
+        }
+    } else if let Some(rid) = &spec.region {
+        let cfg = ae_core::regions::DetectConfig::default();
+        let regions = match ae_core::regions::detect_regions(&img, &cfg) {
+            Ok(r) => r,
+            Err(e) => return fail(&e.to_string()),
+        };
+        match regions.iter().find(|r| r.id == *rid) {
+            Some(r) => r.bounds,
+            None => {
+                return fail(&format!(
+                    "region '{rid}' not found; run 'ae geometry {}' for ids",
+                    spec.image.display()
+                ))
+            }
+        }
+    } else {
+        return fail("one of --box or --region is required");
+    };
+
+    let region = match ae_core::regions::CandidateRegion::measure(&img, bounds) {
+        Ok(r) => r,
+        Err(e) => return fail(&e.to_string()),
+    };
+    // Render just the crop at its natural resolution capped to 80 cols.
+    let out_w = bounds.width().min(80);
+    let out_h = bounds.height().min(60).max(1);
+    let transform = ae_core::geometry::CoordinateTransform::new(bounds, out_w.max(1), out_h);
+    let charset = match ae_render::presets::standard() {
+        Ok(c) => c,
+        Err(e) => return fail(&e.to_string()),
+    };
+    let cfg = ae_render::RenderConfig {
+        renderer: Default::default(),
+        width: out_w.max(1),
+        height: Some(out_h),
+        aspect_ratio: 1.0, // crop is pixel-true; no terminal correction
+        invert: false,
+        charset_override: None,
+        color: Default::default(),
+    };
+    // Crop the source pixels so rendering covers exactly the window.
+    let cropped = crop_image(&img, bounds);
+    let grid = match ae_render::render::render(&cropped, &cfg, &charset) {
+        Ok(g) => g,
+        Err(e) => return fail(&e.to_string()),
+    };
+
+    let body = match spec.format {
+        FormatArg::Text => grid.to_text(),
+        FormatArg::Json => {
+            let prov = ae_core::provenance::Provenance::compute(&bytes, bounds, transform);
+            let payload = RegionJsonV1 {
+                schema_version: "agent-eye.region.v1",
+                image: ImageInfoOwned {
+                    width: img.dimensions.width,
+                    height: img.dimensions.height,
+                    format: img.metadata.format.clone(),
+                },
+                provenance: ProvenanceJson {
+                    source_hash: prov.source_hash,
+                    source_bounds: prov.source_bounds.to_array(),
+                },
+                region: RegionInfo {
+                    id: if region.id.is_empty() {
+                        "custom".to_owned()
+                    } else {
+                        region.id.clone()
+                    },
+                    bounds: region.bounds.to_array(),
+                    area: region.area,
+                    edge_density: region.edge_density,
+                    color_variance: region.color_variance,
+                },
+                representation: RepresentationOwned {
+                    renderer: "ascii",
+                    charset: grid.charset_name.clone(),
+                    data: grid.to_text(),
+                },
+                mapping: MappingInfo::from_transform(&transform),
+            };
+            match serde_json::to_string_pretty(&payload) {
+                Ok(s) => s,
+                Err(e) => return fail(&e.to_string()),
+            }
+        }
+    };
+    emit(&body, spec.output.as_deref(), spec.force)
+}
+
+/// Extracts `bounds` into a new image (zero-copy semantics preserved by
+/// cloning only the requested pixels).
+fn crop_image(
+    img: &ae_core::image::Image,
+    b: ae_core::geometry::HalfOpenBounds,
+) -> ae_core::image::Image {
+    let out_w = b.width().max(1);
+    let out_h = b.height().max(1);
+    let dims = ae_core::image::Dimensions::new(out_w, out_h).unwrap();
+    let mut pixels = Vec::with_capacity((out_w * out_h) as usize);
+    for y in b.y1..b.y1 + out_h {
+        for x in b.x1..b.x1 + out_w {
+            pixels.push(img.pixels.get(x, y).unwrap_or_default());
+        }
+    }
+    let buf = ae_core::image::PixelBuffer::from_vec(dims, pixels).unwrap();
+    ae_core::image::Image::new(dims, buf, img.metadata.clone()).unwrap()
 }
 
 struct RenderSpec {
