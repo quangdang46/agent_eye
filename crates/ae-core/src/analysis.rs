@@ -189,16 +189,15 @@ mod tests {
         }
         let buf = PixelBuffer::from_vec(dims, pixels).unwrap();
         let edges = sobel_edges(&buf);
-        // Border is zero; interior at the step is the max.
-        for y in [1usize] {
-            assert!(
-                edges[y * 4 + 1] > 250.0,
-                "step edge strong (clamped ≤255): {}",
-                edges[1]
-            );
-            assert!(edges[y * 4 + 2] > 250.0);
-            assert_eq!(edges[y * 4 + 3], 0.0);
-        }
+        // Border is zero; interior at the step is the max (row y=1).
+        assert_eq!(edges[1 * 4 + 0], 0.0, "border stays zero");
+        assert!(
+            edges[1 * 4 + 1] > 250.0,
+            "step edge strong (clamped ≤255): {}",
+            edges[1]
+        );
+        assert!(edges[1 * 4 + 2] > 250.0);
+        assert_eq!(edges[1 * 4 + 3], 0.0);
     }
 
     #[test]
