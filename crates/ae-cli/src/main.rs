@@ -59,6 +59,31 @@ enum Command {
         #[arg(long, default_value_t = false)]
         force: bool,
     },
+    /// Crop + resample: more output samples devoted to a smaller source
+    /// region (spatial allocation, NOT detail increase).
+    Zoom {
+        /// Image path, or `-` for stdin.
+        image: PathBuf,
+        /// Region bounds as x,y,w,h in source pixels.
+        #[arg(long)]
+        box_: String,
+        /// Zoom level 0-3 → 1x, 2x, 4x, 8x spatial allocation scale.
+        #[arg(long, value_parser = clap::value_parser!(u32).range(0..=3), default_value_t = 0)]
+        level: u32,
+        /// Output width in characters.
+        #[arg(long, default_value_t = 80)]
+        width: u32,
+        /// Output serialization.
+        #[arg(long, value_enum, default_value_t = FormatArg::Text)]
+        format: FormatArg,
+        /// Write result to file instead of stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Overwrite `--output` file if it exists.
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
+    /// Render an image as ASCII or Unicode blocks.
     /// Extract a specific area as a rendered region with full provenance.
     Region {
         /// Image path, or `-` for stdin.
@@ -154,6 +179,23 @@ fn main() {
             force,
         } => cmd_geometry(GeometrySpec {
             image,
+            format,
+            output,
+            force,
+        }),
+        Command::Zoom {
+            image,
+            box_,
+            level,
+            width,
+            format,
+            output,
+            force,
+        } => cmd_zoom(ZoomSpec {
+            image,
+            box_,
+            level,
+            width,
             format,
             output,
             force,
@@ -371,6 +413,127 @@ fn cmd_geometry(spec: GeometrySpec) -> i32 {
                     })
                     .collect(),
                 relations,
+                mapping: MappingInfo::from_transform(&transform),
+            };
+            match serde_json::to_string_pretty(&payload) {
+                Ok(s) => s,
+                Err(e) => return fail(&e.to_string()),
+            }
+        }
+    };
+    emit(&body, spec.output.as_deref(), spec.force)
+}
+
+struct ZoomSpec {
+    image: PathBuf,
+    box_: String,
+    level: u32,
+    width: u32,
+    format: FormatArg,
+    output: Option<PathBuf>,
+    force: bool,
+}
+
+/// `agent-eye.zoom.v1` payload.
+#[derive(serde::Serialize)]
+struct ZoomJsonV1 {
+    schema_version: &'static str,
+    image: ImageInfoOwned,
+    provenance: ProvenanceJson,
+    zoom: ZoomInfo,
+    representation: RepresentationOwned,
+    mapping: MappingInfo,
+}
+
+#[derive(serde::Serialize)]
+struct ZoomInfo {
+    /// Spatial allocation scale: 1x, 2x, 4x, 8x.
+    scale: f64,
+    level: u32,
+}
+
+fn cmd_zoom(spec: ZoomSpec) -> i32 {
+    let bytes = match read_input(&spec.image) {
+        Ok(b) => b,
+        Err(e) => return fail(&e),
+    };
+    let img = match decode_bytes(&bytes, &Limits::default()) {
+        Ok(i) => i,
+        Err(e) => return fail(&e.to_string()),
+    };
+    let bounds = match parse_box(&spec.box_) {
+        Ok(b) => b,
+        Err(e) => return fail(&e),
+    };
+    if bounds.x2 > img.dimensions.width || bounds.y2 > img.dimensions.height {
+        return fail(&format!(
+            "box {:?} exceeds image {}x{}",
+            bounds.to_array(),
+            img.dimensions.width,
+            img.dimensions.height
+        ));
+    }
+    // Level → spatial allocation scale. The OUTPUT grid is fixed at
+    // --width; a higher level renders the SAME grid from a SMALLER source
+    // window, i.e. output samples per source pixel grow 2^level×.
+    let level_scale = 2u32.pow(spec.level);
+    let crop_w = (bounds.width() / level_scale).clamp(1, bounds.width());
+    let crop_h = (bounds.height() / level_scale).clamp(1, bounds.height());
+    let crop_bounds = match ae_core::geometry::HalfOpenBounds::new(
+        bounds.x1,
+        bounds.y1,
+        bounds.x1 + crop_w,
+        bounds.y1 + crop_h,
+    ) {
+        Ok(b) => b,
+        Err(e) => return fail(&e.to_string()),
+    };
+    let cropped = crop_image(&img, crop_bounds);
+    let charset = match ae_render::presets::standard() {
+        Ok(c) => c,
+        Err(e) => return fail(&e.to_string()),
+    };
+    let cfg = ae_render::RenderConfig {
+        renderer: Default::default(),
+        width: spec.width.clamp(1, 10_000),
+        height: None,      // derive from aspect
+        aspect_ratio: 1.0, // zoom is pixel-true spatial allocation
+        invert: false,
+        charset_override: None,
+        color: Default::default(),
+    };
+    let grid = match ae_render::render::render(&cropped, &cfg, &charset) {
+        Ok(g) => g,
+        Err(e) => return fail(&e.to_string()),
+    };
+    let out_w = grid.width().max(1) as u32;
+    let out_h = grid.height().max(1) as u32;
+    let transform = ae_core::geometry::CoordinateTransform::new(crop_bounds, out_w, out_h);
+
+    let body = match spec.format {
+        FormatArg::Text => grid.to_text(),
+        FormatArg::Json => {
+            let prov = ae_core::provenance::Provenance::compute(&bytes, crop_bounds, transform);
+            let payload = ZoomJsonV1 {
+                schema_version: "agent-eye.zoom.v1",
+                image: ImageInfoOwned {
+                    width: img.dimensions.width,
+                    height: img.dimensions.height,
+                    format: img.metadata.format.clone(),
+                },
+                provenance: ProvenanceJson {
+                    source_hash: prov.source_hash,
+                    source_bounds: prov.source_bounds.to_array(),
+                },
+                zoom: ZoomInfo {
+                    scale: f64::from(level_scale),
+                    level: spec.level,
+                },
+                representation: RepresentationOwned {
+                    renderer: "ascii",
+                    charset: grid.charset_name.clone(),
+                    data: grid.to_text(),
+                },
                 mapping: MappingInfo::from_transform(&transform),
             };
             match serde_json::to_string_pretty(&payload) {
