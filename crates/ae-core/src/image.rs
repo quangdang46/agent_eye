@@ -116,10 +116,10 @@ impl Pixel {
     /// Rec. 709 analysis luminance in `[0, 255]`.
     ///
     /// Always computed internally for analysis; grayscale *presentation* is a
-    /// separate output mode. Coefficients match plan §7 exactly and are the
-    /// single source of truth for luminance math in `ae`.
+    /// separate output mode. Coefficients match plan §7 exactly; delegates to
+    /// `analysis::luminance` (single source of truth).
     pub fn luminance(&self) -> f32 {
-        0.212_6 * f32::from(self.r) + 0.715_2 * f32::from(self.g) + 0.072_2 * f32::from(self.b)
+        crate::analysis::luminance(*self)
     }
 }
 
