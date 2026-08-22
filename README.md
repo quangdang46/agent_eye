@@ -1,20 +1,28 @@
 # ae — Agent-Eye
 
+> [!WARNING]
+> **🚧 MVP / Work in Progress** — `ae` is in MVP stage. The core pipeline
+> (decode → region detection → spatial relations → render) is complete and
+> fully tested, but features may change without notice. Not production-ready.
+> Feedback and bug reports welcome!
+
+**`ae` — Agent-Eye: give text-only AI agents eyes, without a vision model.**
+
+`ae` is a Rust-native CLI that turns images (PNG/JPEG/WebP) into **deterministic
+visual evidence**: detected regions with exact bounds, 7 formal spatial relations,
+ASCII/blocks/braille renders — all with SHA-256 provenance mapping back to source
+pixels. No LLM, no API keys, no cloud. The agent interprets; `ae` provides evidence.
+
+**Why it exists:** text-only LLMs can't see images. The common workaround (stuffing
+ASCII art into context) wastes tokens and loses spatial structure. `ae` solves this:
+it compresses an image into structured evidence that lets an agent answer visual
+questions with fewer tokens and more accuracy.
+
 <div align="center">
   <img src="ae_illustration.webp" alt="ae — Give text-only AI agents eyes">
 </div>
 
 <div align="center">
-
-![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-blue.svg)
-![Rust](https://img.shields.io/badge/Rust-stable-orange.svg)
-![License](https://img.shields.io/badge/License-MIT-blue.svg)
-
-</div>
-
-**Give text-only AI agents eyes — without a vision model.**
-
-`ae` is a Rust-native CLI that converts pixels into deterministic visual evidence: regions, geometry, spatial relations, and structured representations. No LLM, no API keys, no cloud. The agent interprets; `ae` provides evidence.
 
 ```text
                     IMAGE
