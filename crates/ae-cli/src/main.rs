@@ -45,6 +45,27 @@ enum Command {
         #[arg(long, value_enum, default_value_t = FormatArg::Text)]
         format: FormatArg,
     },
+    /// Orchestrated overview: dimensions, regions, relations, rendering,
+    /// mapping — the agent's first look at an image.
+    Inspect {
+        /// Image path, or `-` for stdin.
+        image: PathBuf,
+        /// Output width in characters for the embedded render.
+        #[arg(long, default_value_t = 60)]
+        width: u32,
+        /// Skip the ASCII overview (geometry only).
+        #[arg(long, default_value_t = false)]
+        no_render: bool,
+        /// Output serialization.
+        #[arg(long, value_enum, default_value_t = FormatArg::Text)]
+        format: FormatArg,
+        /// Write result to file instead of stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Overwrite `--output` file if it exists.
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
     /// Spatial evidence: detected regions and their formal relations.
     Geometry {
         /// Image path, or `-` for stdin.
@@ -172,6 +193,21 @@ fn main() {
     let cli = Cli::parse();
     let exit_code = match cli.command {
         Command::Capabilities { format } => cmd_capabilities(format),
+        Command::Inspect {
+            image,
+            width,
+            no_render,
+            format,
+            output,
+            force,
+        } => cmd_inspect(InspectSpec {
+            image,
+            width,
+            no_render,
+            format,
+            output,
+            force,
+        }),
         Command::Geometry {
             image,
             format,
@@ -322,6 +358,142 @@ fn cmd_capabilities(format: FormatArg) -> i32 {
         },
     }
     0
+}
+
+struct InspectSpec {
+    image: PathBuf,
+    width: u32,
+    no_render: bool,
+    format: FormatArg,
+    output: Option<PathBuf>,
+    force: bool,
+}
+
+/// `agent-eye.scene.v1` payload — the orchestrated overview (plan §11).
+#[derive(serde::Serialize)]
+struct SceneJsonV1 {
+    schema_version: &'static str,
+    image: ImageInfoOwned,
+    provenance: ProvenanceJson,
+    regions: Vec<RegionInfo>,
+    relations: Vec<ae_core::relations::Relation>,
+    representation: Option<RepresentationOwned>,
+    mapping: MappingInfo,
+}
+
+/// Orchestrates decode → detect → relate → render → provenance. The CLI is
+/// orchestration only; every primitive lives in ae-core / ae-render.
+fn cmd_inspect(spec: InspectSpec) -> i32 {
+    let bytes = match read_input(&spec.image) {
+        Ok(b) => b,
+        Err(e) => return fail(&e),
+    };
+    let img = match decode_bytes(&bytes, &Limits::default()) {
+        Ok(i) => i,
+        Err(e) => return fail(&e.to_string()),
+    };
+    let cfg = ae_core::regions::DetectConfig::default();
+    let regions = match ae_core::regions::detect_regions(&img, &cfg) {
+        Ok(r) => r,
+        Err(e) => return fail(&e.to_string()),
+    };
+    let relations = ae_core::relations::compute_relations(&regions);
+
+    // Optional ASCII overview at the requested width.
+    let mut representation: Option<RepresentationOwned> = None;
+    let mut render_cfg: Option<(ae_render::RenderConfig, ae_render::Charset)> = None;
+    if !spec.no_render {
+        let charset = match ae_render::presets::standard() {
+            Ok(c) => c,
+            Err(e) => return fail(&e.to_string()),
+        };
+        let rcfg = ae_render::RenderConfig {
+            width: spec.width.clamp(1, 10_000),
+            ..Default::default()
+        };
+        match ae_render::render::render(&img, &rcfg, &charset) {
+            Ok(grid) => {
+                representation = Some(RepresentationOwned {
+                    renderer: "ascii",
+                    charset: grid.charset_name.clone(),
+                    data: grid.to_text(),
+                });
+                render_cfg = Some((rcfg, charset));
+            }
+            Err(e) => return fail(&e.to_string()),
+        }
+    }
+    let _ = &render_cfg; // kept for symmetry with region/zoom paths
+
+    let transform = ae_core::geometry::CoordinateTransform::new(
+        img.bounds(),
+        img.dimensions.width,
+        img.dimensions.height,
+    );
+    let prov = ae_core::provenance::Provenance::compute(&bytes, img.bounds(), transform);
+
+    let body = match spec.format {
+        FormatArg::Text => {
+            let mut s = String::new();
+            s.push_str(&format!(
+                "image: {}x{} ({})\n",
+                img.dimensions.width,
+                img.dimensions.height,
+                img.metadata.format.as_deref().unwrap_or("unknown")
+            ));
+            if let Some(repr) = &representation {
+                s.push_str(repr.data.trim_end());
+                s.push('\n');
+            }
+            s.push_str(&format!("regions: {}\n", regions.len()));
+            for r in &regions {
+                s.push_str(&format!(
+                    "  {} bounds={:?} area={:.3} edge_density={:.3}\n",
+                    r.id,
+                    r.bounds.to_array(),
+                    r.area,
+                    r.edge_density
+                ));
+            }
+            s.push_str(&format!("relations: {}\n", relations.len()));
+            for rel in &relations {
+                s.push_str(&format!("  {} {} {}\n", rel.kind, rel.a, rel.b));
+            }
+            s
+        }
+        FormatArg::Json => {
+            let payload = SceneJsonV1 {
+                schema_version: "agent-eye.scene.v1",
+                image: ImageInfoOwned {
+                    width: img.dimensions.width,
+                    height: img.dimensions.height,
+                    format: img.metadata.format.clone(),
+                },
+                provenance: ProvenanceJson {
+                    source_hash: prov.source_hash,
+                    source_bounds: prov.source_bounds.to_array(),
+                },
+                regions: regions
+                    .iter()
+                    .map(|r| RegionInfo {
+                        id: r.id.clone(),
+                        bounds: r.bounds.to_array(),
+                        area: r.area,
+                        edge_density: r.edge_density,
+                        color_variance: r.color_variance,
+                    })
+                    .collect(),
+                relations,
+                representation,
+                mapping: MappingInfo::from_transform(&transform),
+            };
+            match serde_json::to_string_pretty(&payload) {
+                Ok(s) => s,
+                Err(e) => return fail(&e.to_string()),
+            }
+        }
+    };
+    emit(&body, spec.output.as_deref(), spec.force)
 }
 
 struct GeometrySpec {
