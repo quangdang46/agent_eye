@@ -51,12 +51,13 @@ proptest! {
     ) {
         let cfg = ae_render::RenderConfig {
             renderer: Default::default(),
+            background: None,
             width: w,
             height: Some(100),
             aspect_ratio: aspect,
             invert,
-            charset_override: None,
             color: Default::default(),
+            charset_override: None,
         };
         let charset = cfg.resolve_charset().prop_unwrap()?;
         let g1 = ae_render::render::render(&img, &cfg, &charset).prop_unwrap()?;

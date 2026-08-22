@@ -3,28 +3,28 @@
     "cases": 6,
     "est_tokens": 11975,
     "total_bytes": 47912,
-    "total_ms": 79,
+    "total_ms": 76,
     "total_tool_calls": 12
   },
   "ae-negative": {
     "cases": 6,
     "est_tokens": 4141,
     "total_bytes": 16580,
-    "total_ms": 47,
+    "total_ms": 43,
     "total_tool_calls": 6
   },
   "ae-progressive": {
     "cases": 6,
     "est_tokens": 4752,
     "total_bytes": 19010,
-    "total_ms": 199,
+    "total_ms": 189,
     "total_tool_calls": 12
   },
   "ascii": {
     "cases": 6,
     "est_tokens": 3648,
     "total_bytes": 14592,
-    "total_ms": 66,
+    "total_ms": 59,
     "total_tool_calls": 6
   },
   "baseline": {
@@ -38,7 +38,7 @@
     "cases": 6,
     "est_tokens": 6860,
     "total_bytes": 27440,
-    "total_ms": 65,
+    "total_ms": 59,
     "total_tool_calls": 6
   }
 }

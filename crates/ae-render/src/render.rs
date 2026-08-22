@@ -64,36 +64,39 @@ pub fn render(img: &Image, cfg: &RenderConfig, charset: &Charset) -> Result<Rend
     // Style cache: emit an escape only when the color actually changes.
     // Flat-color regions collapse from per-cell escapes to a handful of
     // transitions (lesson from RASCII: ~1800% output reduction there).
+    let bg = cfg
+        .background
+        .map(|(r, g, b)| format!("\u{1b}[48;2;{r};{g};{b}m"))
+        .unwrap_or_default();
     let mut last_style: Option<String> = None;
     let mut last_glyph: &str = "";
     for b in &blocks {
         let lum = b.luminance();
         let glyph = effective.glyph_for_luminance(lum);
-        let cell = match cfg.color {
-            ColorMode::None => glyph.to_owned(),
+        let fg = match cfg.color {
+            ColorMode::None => String::new(),
             ColorMode::Grayscale => {
                 let level = (lum / 255.0).clamp(0.0, 1.0);
                 let shade = 232 + (level * 23.0).round() as u8; // ANSI 232..=255
-                let style = format!("\u{1b}[38;5;{shade}m");
-                if Some(&style) == last_style.as_ref() && glyph == last_glyph {
-                    String::new() // repeat: same glyph, same color
-                } else {
-                    last_style = Some(style.clone());
-                    format!("{style}{glyph}\u{1b}[0m")
-                }
+                format!("\u{1b}[38;5;{shade}m")
             }
             ColorMode::TrueColor => {
                 // Block-average RGB IS the pixel-true color at this scale —
                 // no quantization beyond the sampling itself.
                 let p = b.pixel;
-                let style = format!("\u{1b}[38;2;{};{};{}m", p.r, p.g, p.b);
-                if Some(&style) == last_style.as_ref() && glyph == last_glyph {
-                    String::new()
-                } else {
-                    last_style = Some(style.clone());
-                    format!("{style}{glyph}\u{1b}[0m")
-                }
+                format!("\u{1b}[38;2;{};{};{}m", p.r, p.g, p.b)
             }
+        };
+        // Background is constant across cells; fold it into the style key
+        // so the first colored cell paints both planes.
+        let style = format!("{bg}{fg}");
+        let cell = if cfg.color == ColorMode::None {
+            glyph.to_owned()
+        } else if Some(&style) == last_style.as_ref() && glyph == last_glyph {
+            String::new() // repeat: same glyph, same color
+        } else {
+            last_style = Some(style.clone());
+            format!("{style}{glyph}\u{1b}[0m")
         };
         last_glyph = glyph;
         row.push(cell);
@@ -262,6 +265,31 @@ mod tests {
         let g = render_ascii(&img, &cfg).unwrap();
         assert!(g.rows[0][0].starts_with("\u{1b}[38;2;255;0;0m#"));
         assert_eq!(g.color, ColorMode::TrueColor);
+    }
+
+    #[test]
+    fn background_painted_in_first_style() {
+        let img = solid_img(8, 8, 0);
+        let cfg = RenderConfig {
+            width: 4,
+            height: Some(2),
+            color: ColorMode::TrueColor,
+            background: Some((10, 20, 30)),
+            ..Default::default()
+        };
+        let g = render_ascii(&img, &cfg).unwrap();
+        // First cell opens with bg then fg escapes; reset closes.
+        assert!(g.rows[0][0].starts_with("\u{1b}[48;2;10;20;30m\u{1b}[38;2;0;0;0m@"));
+        assert!(g.rows[0][0].ends_with("\u{1b}[0m"));
+        // None background → no 48;2 sequences anywhere in plain mode.
+        let plain_cfg = RenderConfig {
+            width: 4,
+            height: Some(2),
+            background: Some((10, 20, 30)),
+            ..Default::default()
+        };
+        let gp = render_ascii(&img, &plain_cfg).unwrap();
+        assert!(!gp.to_text().contains("48;2"));
     }
 
     #[test]

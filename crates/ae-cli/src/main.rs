@@ -148,8 +148,11 @@ enum Command {
         /// `true-color` (per-cell RGB escapes; human display).
         #[arg(long, default_value = "none")]
         color: ColorMode,
-        /// ANSI 256 grayscale presentation (human display; analysis is
-        /// always internal luminance).
+        /// ANSI background as R,G,B (0-255 each); requires a --color mode
+        /// other than none.
+        #[arg(long)]
+        background: Option<String>,
+        /// ANSI 256 grayscale presentation shorthand (= --color grayscale).
         #[arg(long, default_value_t = false, conflicts_with = "color")]
         grayscale: bool,
         /// Charset: preset name (`standard|dense|blocks`) or custom ramp string.
@@ -263,6 +266,7 @@ fn main() {
             aspect,
             invert,
             color,
+            background,
             grayscale,
             charset,
             full,
@@ -293,6 +297,7 @@ fn main() {
                 aspect,
                 invert,
                 color,
+                background,
                 charset,
                 format,
                 output,
@@ -684,6 +689,7 @@ fn cmd_zoom(spec: ZoomSpec) -> i32 {
         invert: false,
         charset_override: None,
         color: Default::default(),
+        background: None,
     };
     let grid = match ae_render::render::render(&cropped, &cfg, &charset) {
         Ok(g) => g,
@@ -842,6 +848,7 @@ fn cmd_region(spec: RegionSpec) -> i32 {
         invert: false,
         charset_override: None,
         color: Default::default(),
+        background: None,
     };
     // Crop the source pixels so rendering covers exactly the window.
     let cropped = crop_image(&img, bounds);
@@ -921,6 +928,8 @@ struct RenderSpec {
     aspect: f32,
     invert: bool,
     color: ColorMode,
+    /// Raw `--background` value "R,G,B", parsed in cmd_render.
+    background: Option<String>,
     charset: Option<String>,
     format: FormatArg,
     /// Write result here instead of stdout.
@@ -1000,6 +1009,25 @@ fn cmd_render(spec: RenderSpec) -> i32 {
         Ok(i) => i,
         Err(e) => return fail(&e.to_string()),
     };
+    // Parse --background "R,G,B" (each 0-255). Only meaningful with a
+    // non-none color mode.
+    let background = match &spec.background {
+        Some(s) => {
+            let parts: Result<Vec<u8>, _> = s.split(',').map(|p| p.trim().parse()).collect();
+            let rgb = match parts.map_err(|e| format!("--background parse failed: {e}")) {
+                Ok(v) => v,
+                Err(m) => return fail(&m),
+            };
+            if rgb.len() != 3 {
+                return fail("--background expects R,G,B (three 0-255 values)");
+            }
+            if spec.color == ColorMode::None {
+                return fail("--background requires --color grayscale or true-color");
+            }
+            Some((rgb[0], rgb[1], rgb[2]))
+        }
+        None => None,
+    };
 
     let cfg = RenderConfig {
         renderer: spec.renderer,
@@ -1009,6 +1037,7 @@ fn cmd_render(spec: RenderSpec) -> i32 {
         invert: spec.invert,
         charset_override: spec.charset.clone(),
         color: spec.color,
+        background,
     };
     if let Err(e) = cfg.validate() {
         return fail(&e.to_string());

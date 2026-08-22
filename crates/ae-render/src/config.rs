@@ -112,6 +112,9 @@ pub struct RenderConfig {
     /// Raw `--charset` value: preset name or custom glyph string.
     pub charset_override: Option<String>,
     pub color: ColorMode,
+    /// Optional ANSI background (`Some((r,g,b))`) painted behind every
+    /// cell when color presentation is active. `None` = terminal default.
+    pub background: Option<(u8, u8, u8)>,
 }
 
 impl Default for RenderConfig {
@@ -124,6 +127,7 @@ impl Default for RenderConfig {
             height: None,
             charset_override: None,
             color: ColorMode::default(),
+            background: None,
         }
     }
 }
