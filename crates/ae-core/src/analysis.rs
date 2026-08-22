@@ -201,11 +201,93 @@ pub mod color_variance {
     }
 }
 
+/// Weighted-aggregate visual complexity score (plan §8).
+///
+/// Internal implementation detail for the future `--budget` adaptive
+/// rendering (Phase 8 P1); not exposed through the CLI in v1. Purely
+/// geometric/statistical — carries no task relevance or semantics.
+///
+/// All inputs are expected pre-normalized to `[0.0, 1.0]` (see [`contrast`]
+/// and [`color_variance`]); `redundancy` is 1 − normalized entropy-style
+/// measure of how repetitive the content is.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VisualComplexity {
+    /// Mean Sobel edge strength, /255.
+    pub edge: f32,
+    /// RMS contrast.
+    pub variance: f64,
+    /// Chroma variance.
+    pub gradient: f64,
+    /// Redundancy estimate: fraction of identical adjacent-pixel pairs,
+    /// `[0.0, 1.0]` (high = flat/repetitive = simple).
+    pub redundancy: f64,
+    /// Weighted aggregate in `[0.0, 1.0]`.
+    pub score: f64,
+}
+
+impl VisualComplexity {
+    /// Weights sum to 1 so `score` stays in range when inputs do.
+    const W_EDGE: f64 = 0.4;
+    const W_VARIANCE: f64 = 0.25;
+    const W_GRADIENT: f64 = 0.15;
+    const W_REDUNDANCY_INVERSE: f64 = 0.2;
+
+    /// Computes complexity for a buffer: runs edge + contrast + chroma
+    /// passes internally. Deterministic.
+    pub fn compute(buf: &PixelBuffer) -> Self {
+        let edges = sobel_edges(buf);
+        let mean_edge = if edges.is_empty() {
+            0.0
+        } else {
+            edges.iter().sum::<f32>() / edges.len() as f32 / 255.0
+        };
+        let rms_c = contrast::rms(buf);
+        let cv = color_variance::chroma_variance(buf);
+        let redundancy = Self::adjacent_pair_redundancy(buf);
+        let score = Self::W_EDGE * f64::from(mean_edge)
+            + Self::W_VARIANCE * rms_c
+            + Self::W_GRADIENT * cv
+            + Self::W_REDUNDANCY_INVERSE * (1.0 - redundancy);
+        Self {
+            edge: mean_edge.clamp(0.0, 1.0),
+            variance: rms_c,
+            gradient: cv,
+            redundancy,
+            score: score.clamp(0.0, 1.0),
+        }
+    }
+
+    /// Fraction of horizontally-adjacent pixel pairs with identical RGB.
+    fn adjacent_pair_redundancy(buf: &PixelBuffer) -> f64 {
+        let slice = buf.as_slice();
+        let w = buf.dimensions().width as usize;
+        let h = buf.dimensions().height as usize;
+        if w < 2 || h == 0 {
+            return 0.0;
+        }
+        let mut same = 0u64;
+        let mut total = 0u64;
+        for row in 0..h {
+            let start = row * w;
+            for i in start..start + w - 1 {
+                let (a, b) = (&slice[i], &slice[i + 1]);
+                if a.r == b.r && a.g == b.g && a.b == b.b {
+                    same += 1;
+                }
+                total += 1;
+            }
+        }
+        if total == 0 {
+            0.0
+        } else {
+            same as f64 / total as f64
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::image::{Dimensions, PixelBuffer};
-
     #[test]
     fn endpoints_black_white() {
         assert_eq!(luminance(Pixel::opaque(0, 0, 0)), 0.0);
@@ -377,5 +459,48 @@ mod tests {
         let cv = PixelBuffer::from_vec(dims, colored).unwrap();
         assert!(color_variance::chroma_variance(&cv) > 0.01);
         assert!(color_variance::chroma_variance(&cv) <= 1.0);
+    }
+
+    #[test]
+    fn complexity_flat_is_low_checkerboard_lower_than_noise() {
+        // Flat image: zero edges, zero contrast → minimal score.
+        let dims = Dimensions::new(8, 8).unwrap();
+        let flat = PixelBuffer::from_vec(dims, vec![Pixel::opaque(50, 50, 50); 64]).unwrap();
+        let c_flat = VisualComplexity::compute(&flat);
+        assert_eq!(c_flat.edge, 0.0);
+        assert_eq!(c_flat.variance, 0.0);
+        assert!(
+            (c_flat.redundancy - 1.0).abs() < 1e-9,
+            "all pairs identical"
+        );
+        assert_eq!(
+            c_flat.score, 0.0,
+            "fully flat: redundancy=1 zeroes the only surviving term"
+        );
+
+        // High-frequency noise scores higher than the flat image.
+        let noisy_pixels: Vec<Pixel> = (0..64)
+            .map(|i| {
+                let v = ((i * 37 + 11) % 256) as u8;
+                Pixel::opaque(v, (255 - v), (i % 2 * 255) as u8)
+            })
+            .collect();
+        let noisy = PixelBuffer::from_vec(dims, noisy_pixels).unwrap();
+        let c_noisy = VisualComplexity::compute(&noisy);
+        assert!(c_noisy.score > c_flat.score);
+        assert!(c_noisy.score <= 1.0 && c_flat.score <= 1.0);
+    }
+
+    #[test]
+    fn complexity_deterministic() {
+        let dims = Dimensions::new(6, 5).unwrap();
+        let pixels: Vec<Pixel> = (0..30)
+            .map(|i| Pixel::opaque(((i * 29) % 256) as u8, ((i * 3) % 256) as u8, 7))
+            .collect();
+        let buf = PixelBuffer::from_vec(dims, pixels).unwrap();
+        assert_eq!(
+            VisualComplexity::compute(&buf),
+            VisualComplexity::compute(&buf)
+        );
     }
 }

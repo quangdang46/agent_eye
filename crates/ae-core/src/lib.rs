@@ -7,7 +7,7 @@ pub mod provenance;
 
 pub use analysis::{
     average_pixel, block_luminance, color_variance, contrast, luminance, luminance_range,
-    sobel_edges,
+    sobel_edges, VisualComplexity,
 };
 pub use decode::decode_bytes;
 pub use error::{
