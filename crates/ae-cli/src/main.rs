@@ -355,8 +355,8 @@ fn cmd_region(spec: RegionSpec) -> i32 {
         Err(e) => return fail(&e.to_string()),
     };
     // Render just the crop at its natural resolution capped to 80 cols.
-    let out_w = bounds.width().min(80);
-    let out_h = bounds.height().min(60).max(1);
+    let out_w = bounds.width().clamp(1, 80);
+    let out_h = bounds.height().clamp(1, 60);
     let transform = ae_core::geometry::CoordinateTransform::new(bounds, out_w.max(1), out_h);
     let charset = match ae_render::presets::standard() {
         Ok(c) => c,
