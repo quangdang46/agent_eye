@@ -1,6 +1,6 @@
 use image::GenericImageView;
 
-use crate::error::{decode_failed, Result};
+use crate::error::{decode_failed, resource_limit, Result};
 use crate::image::{Dimensions, Image, ImageMetadata, Limits, Pixel, PixelBuffer};
 
 fn from_rgba8(dims: Dimensions, rgba: image::RgbaImage, format_name: &str) -> Result<Image> {
@@ -29,10 +29,26 @@ fn from_rgba8(dims: Dimensions, rgba: image::RgbaImage, format_name: &str) -> Re
 /// a buffer, so a decompression bomb is rejected by arithmetic rather than OOM.
 /// Auto-detects PNG/JPEG/WebP from container magic; on a nonsense-bytes
 /// payload returns `Decode` without panicking.
+///
+/// Note on formats: PNG/JPEG/WebP are not ZIP-container formats, so the
+/// compressed-ratio check that applies to ZIP-based images (e.g. some TIFF
+/// variants) is not applicable here; dimension caps cover those bombs.
 pub fn decode_bytes(bytes: &[u8], limits: &Limits) -> Result<Image> {
     if bytes.is_empty() {
         return Err(decode_failed("empty input"));
     }
+    let started = std::time::Instant::now();
+    let image = decode_inner(bytes, limits)?;
+    if started.elapsed() > limits.max_processing_time {
+        return Err(resource_limit(format!(
+            "decode exceeded max_processing_time={:?}",
+            limits.max_processing_time
+        )));
+    }
+    Ok(image)
+}
+
+fn decode_inner(bytes: &[u8], limits: &Limits) -> Result<Image> {
     if let Ok(img) = image::load_from_memory_with_format(bytes, image::ImageFormat::WebP) {
         let (w, h) = img.dimensions();
         limits.check_input(bytes.len() as u64, w, h)?;
@@ -183,6 +199,7 @@ mod tests {
             max_pixels: 16,
             max_width: 100_000,
             max_height: 100_000,
+            max_processing_time: std::time::Duration::from_secs(30),
         };
         let r = super::decode_bytes(&buf, &tiny);
         assert!(r.is_err());

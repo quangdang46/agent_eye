@@ -13,6 +13,10 @@ pub struct Limits {
     pub max_pixels: u64,
     pub max_width: u32,
     pub max_height: u32,
+    /// Wall-clock ceiling for a single decode call (defense in depth; the
+    /// pixel/width/height caps do the heavy lifting, this catches slow-loris
+    /// style pathological decoders). Checked after the decode call returns.
+    pub max_processing_time: std::time::Duration,
 }
 
 impl Default for Limits {
@@ -22,6 +26,7 @@ impl Default for Limits {
             max_pixels: 25_000_000,
             max_width: 100_000,
             max_height: 100_000,
+            max_processing_time: std::time::Duration::from_secs(30),
         }
     }
 }
