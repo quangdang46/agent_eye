@@ -18,6 +18,12 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
+    /// Feature discovery for agents: what this build can do.
+    Capabilities {
+        /// Output serialization.
+        #[arg(long, value_enum, default_value_t = FormatArg::Text)]
+        format: FormatArg,
+    },
     /// Render an image as ASCII or Unicode blocks.
     Render {
         /// Image path, or `-` for stdin.
@@ -70,6 +76,7 @@ enum FormatArg {
 fn main() {
     let cli = Cli::parse();
     let exit_code = match cli.command {
+        Command::Capabilities { format } => cmd_capabilities(format),
         Command::Render {
             image,
             renderer,
@@ -91,6 +98,74 @@ fn main() {
         }),
     };
     std::process::exit(exit_code);
+}
+
+/// `agent-eye.capabilities.v1` payload (plan §11).
+#[derive(serde::Serialize)]
+struct CapabilitiesV1 {
+    schema_version: &'static str,
+    version: &'static str,
+    input: &'static [&'static str],
+    renderers: &'static [&'static str],
+    commands: &'static [&'static str],
+    output_formats: &'static [&'static str],
+    limits: LimitsInfo,
+}
+
+#[derive(serde::Serialize)]
+struct LimitsInfo {
+    max_pixels: u64,
+    max_file_size_bytes: u64,
+    max_region_count: u32,
+    max_render_width: u32,
+    max_render_height: u32,
+    max_charset_length: usize,
+}
+
+fn cmd_capabilities(format: FormatArg) -> i32 {
+    let caps = CapabilitiesV1 {
+        schema_version: "agent-eye.capabilities.v1",
+        version: env!("CARGO_PKG_VERSION"),
+        input: &["png", "jpeg", "webp", "stdin"],
+        renderers: &["ascii", "blocks"],
+        // Commands shipped so far; grows as phases land.
+        commands: &["render", "capabilities"],
+        output_formats: &["text", "json"],
+        limits: LimitsInfo {
+            max_pixels: 25_000_000,
+            max_file_size_bytes: 104_857_600,
+            max_region_count: 500,
+            max_render_width: 10_000,
+            max_render_height: 10_000,
+            max_charset_length: ae_render::MAX_CHARSET_LEN,
+        },
+    };
+    match format {
+        FormatArg::Text => {
+            println!("ae {} — agent-eye capabilities", caps.version);
+            println!("input:         {}", caps.input.join(", "));
+            println!("renderers:     {}", caps.renderers.join(", "));
+            println!("commands:      {}", caps.commands.join(", "));
+            println!("output:        {}", caps.output_formats.join(", "));
+            println!("limits:");
+            println!(
+                "  max_pixels={} max_file_size_bytes={}",
+                caps.limits.max_pixels, caps.limits.max_file_size_bytes
+            );
+            println!(
+                "  max_region_count={} max_render_width={} max_render_height={}",
+                caps.limits.max_region_count,
+                caps.limits.max_render_width,
+                caps.limits.max_render_height
+            );
+            println!("  max_charset_length={}", caps.limits.max_charset_length);
+        }
+        FormatArg::Json => match serde_json::to_string_pretty(&caps) {
+            Ok(s) => println!("{s}"),
+            Err(e) => return fail(&e.to_string()),
+        },
+    }
+    0
 }
 
 struct RenderSpec {
