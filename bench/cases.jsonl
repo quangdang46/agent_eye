@@ -1,0 +1,6 @@
+{"id":"001","image":"001-ui.png","task":"What is located in the top-left area of the image?","type":"spatial"}
+{"id":"002","image":"002-diagram.png","task":"How many visually distinct regions does this image contain?","type":"structure"}
+{"id":"003","image":"003-button.png","task":"What exact glyphs appear inside the bright central box?","type":"detail"}
+{"id":"004","image":"004-screenshot.png","task":"Describe the vertical layout structure from top to bottom.","type":"geometry"}
+{"id":"005","image":"001-ui.png","task":"Read the exact text labels rendered in this image.","type":"negative","expected_insufficient":true}
+{"id":"006","image":"003-button.png","task":"How many edges cross the boundary of the bright region?","type":"counting"}
