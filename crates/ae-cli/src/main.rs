@@ -25,9 +25,9 @@ use std::path::{Path, PathBuf};
 
 use ae_core::decode::decode_bytes;
 use ae_core::image::Limits;
-use ae_render::config::{ColorMode, RenderConfig};
+use ae_render::config::{ColorMode, RenderConfig, RendererType};
 use ae_render::render::RenderedGrid;
-use ae_render::{render, Charset};
+use ae_render::{render, render_braille, Charset};
 
 /// ae — Agent-Eye: converts pixels into deterministic visual evidence.
 #[derive(Parser, Debug)]
@@ -164,6 +164,12 @@ enum Command {
         /// other than none.
         #[arg(long)]
         background: Option<String>,
+        /// Braille dot threshold, luminance 0-255 (braille renderer only).
+        #[arg(long)]
+        threshold: Option<f32>,
+        /// Braille Floyd–Steinberg dithering (braille renderer only).
+        #[arg(long, default_value_t = false)]
+        dither: bool,
         /// ANSI 256 grayscale presentation shorthand (= --color grayscale).
         #[arg(long, default_value_t = false, conflicts_with = "color")]
         grayscale: bool,
@@ -190,6 +196,7 @@ enum Command {
 enum RendererArg {
     Ascii,
     Blocks,
+    Braille,
 }
 
 impl From<RendererArg> for ae_render::config::RendererType {
@@ -197,6 +204,7 @@ impl From<RendererArg> for ae_render::config::RendererType {
         match r {
             RendererArg::Ascii => Self::Ascii,
             RendererArg::Blocks => Self::Blocks,
+            RendererArg::Braille => Self::Braille,
         }
     }
 }
@@ -285,6 +293,8 @@ fn main() {
             color,
             background,
             grayscale,
+            threshold,
+            dither,
             charset,
             full,
             format,
@@ -314,6 +324,8 @@ fn main() {
                 aspect,
                 invert,
                 color,
+                threshold,
+                dither,
                 background,
                 charset,
                 format,
@@ -1050,6 +1062,10 @@ struct RenderSpec {
     aspect: f32,
     invert: bool,
     color: ColorMode,
+    /// Braille dot threshold (luminance 0-255).
+    threshold: Option<f32>,
+    /// Braille Floyd–Steinberg dithering.
+    dither: bool,
     /// Raw `--background` value "R,G,B", parsed in cmd_render.
     background: Option<String>,
     charset: Option<String>,
@@ -1163,6 +1179,20 @@ fn cmd_render(spec: RenderSpec) -> i32 {
     };
     if let Err(e) = cfg.validate() {
         return fail(&e.to_string());
+    }
+    // Braille has its own engine (dot lattice, threshold, dithering) and
+    // always emits text; the ramp renderers share render::render.
+    if cfg.renderer == RendererType::Braille {
+        let bcfg = ae_render::BrailleConfig {
+            width: cfg.width,
+            threshold: spec.threshold.unwrap_or(128.0),
+            dither: spec.dither,
+        };
+        let body = match render_braille(&img, &bcfg) {
+            Ok(b) => b,
+            Err(e) => return fail(&e.to_string()),
+        };
+        return emit(&body, spec.output.as_deref(), spec.force);
     }
     let charset: Charset = match cfg.resolve_charset() {
         Ok(c) => c,

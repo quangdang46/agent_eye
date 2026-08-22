@@ -14,7 +14,7 @@ use ae_core::{rendering, Result};
 /// Output width default: plan §6 (`--width` default 100 chars).
 pub const DEFAULT_RENDER_WIDTH: u32 = 100;
 
-/// Renderer selection (`--renderer ascii|blocks`).
+/// Renderer selection (`--renderer ascii|blocks|braille`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum RendererType {
     /// Classic ASCII character ramp.
@@ -22,6 +22,8 @@ pub enum RendererType {
     Ascii,
     /// Unicode block shading (█▓▒░) — higher spatial density.
     Blocks,
+    /// 2×4-dot braille cells (U+2800..) — highest spatial density.
+    Braille,
 }
 
 impl RendererType {
@@ -30,8 +32,9 @@ impl RendererType {
         match s {
             "ascii" => Ok(Self::Ascii),
             "blocks" => Ok(Self::Blocks),
+            "braille" => Ok(Self::Braille),
             other => Err(rendering(format!(
-                "unknown renderer '{other}' (expected 'ascii' or 'blocks')"
+                "unknown renderer '{other}' (expected 'ascii', 'blocks', or 'braille')"
             ))),
         }
     }
@@ -40,6 +43,7 @@ impl RendererType {
         match self {
             Self::Ascii => "ascii",
             Self::Blocks => "blocks",
+            Self::Braille => "braille",
         }
     }
 
@@ -48,6 +52,9 @@ impl RendererType {
         match self {
             Self::Ascii => presets::standard(),
             Self::Blocks => presets::blocks(),
+            // Braille has no charset ramp; dots are the glyphs. The config
+            // surface still needs a Charset, so use the blocks preset.
+            Self::Braille => presets::blocks(),
         }
     }
 }
@@ -218,9 +225,13 @@ mod tests {
     fn renderer_parse_roundtrip() {
         assert_eq!(RendererType::parse("ascii").unwrap(), RendererType::Ascii);
         assert_eq!(RendererType::parse("blocks").unwrap(), RendererType::Blocks);
+        assert_eq!(
+            RendererType::parse("braille").unwrap(),
+            RendererType::Braille
+        );
         assert_eq!(RendererType::Ascii.as_str(), "ascii");
         assert_eq!(RendererType::Blocks.as_str(), "blocks");
-        assert!(RendererType::parse("braille").is_err());
+        assert_eq!(RendererType::Braille.as_str(), "braille");
         assert!(RendererType::parse("").is_err());
     }
 

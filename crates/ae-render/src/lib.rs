@@ -1,7 +1,10 @@
+pub mod braille;
 pub mod charset;
 pub mod config;
 pub mod render;
 pub mod sampling;
+
+pub use braille::{render_braille, BrailleConfig};
 
 pub use charset::{presets, Charset, MAX_CHARSET_LEN};
 pub use config::{ColorMode, RenderConfig, RendererType, DEFAULT_RENDER_WIDTH};
