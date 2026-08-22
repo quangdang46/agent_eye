@@ -1,29 +1,20 @@
 //! Renderers: map sampled block luminance to glyphs.
 //!
 //! Both renderers share the same sampling pipeline ([`crate::sampling`]) and
-//! differ only in charset mapping. Output is a `Vec<Vec<char>>`-shaped grid
-//! exposed as [`RenderedGrid`] (row-major glyph strings) so callers keep
-//! provenance and can emit text or JSON identically. Determinism contract:
-//! same image + same config ⇒ byte-identical output.
+//! differ only in charset mapping. Output is exposed as [`RenderedGrid`]
+//! (row-major glyph strings) so callers can emit text or JSON identically.
+//! Determinism contract: same image + same config ⇒ byte-identical output.
 
 use crate::charset::{presets, Charset};
-use crate::sampling::{sample_blocks, Block, DEFAULT_ASPECT_RATIO};
+use crate::config::{RenderConfig, RendererType};
+use crate::sampling::{sample_blocks, Block};
 use ae_core::image::Image;
 use ae_core::Result;
-
-/// Renderer selection (`--renderer`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RendererKind {
-    /// Classic ASCII ramp.
-    Ascii,
-    /// Unicode half-block shading — higher spatial density per cell.
-    Blocks,
-}
 
 /// A rendered output grid: rows of grapheme-cluster strings.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RenderedGrid {
-    pub renderer: RendererKind,
+    pub renderer: RendererType,
     pub charset_name: String,
     /// Row-major; each entry is one glyph cluster (may be multi-codepoint).
     pub rows: Vec<Vec<String>>,
@@ -48,28 +39,6 @@ impl RenderedGrid {
     }
 }
 
-/// Configuration for a single render pass.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct RenderConfig {
-    pub renderer: RendererKind,
-    pub out_w: u32,
-    pub out_h: u32,
-    pub aspect_ratio: f32,
-    pub invert: bool,
-}
-
-impl Default for RenderConfig {
-    fn default() -> Self {
-        Self {
-            renderer: RendererKind::Ascii,
-            out_w: 100,
-            out_h: 100,
-            aspect_ratio: DEFAULT_ASPECT_RATIO,
-            invert: false,
-        }
-    }
-}
-
 /// Samples `img` and maps each block's luminance through `charset`.
 ///
 /// Shared path for both renderers — the only difference is the charset the
@@ -81,7 +50,12 @@ pub fn render(img: &Image, cfg: &RenderConfig, charset: &Charset) -> Result<Rend
     } else {
         charset.clone()
     };
-    let blocks = sample_blocks(img, cfg.out_w, cfg.out_h, cfg.aspect_ratio)?;
+    cfg.validate()?;
+    let out_h = cfg
+        .height
+        .unwrap_or((cfg.width as f32 / cfg.aspect_ratio) as u32)
+        .max(1);
+    let blocks = sample_blocks(img, cfg.width, out_h, cfg.aspect_ratio)?;
     let cols = effective_row_width(&blocks, img, cfg);
     let mut rows: Vec<Vec<String>> = Vec::with_capacity(blocks.len() / cols.max(1));
     let mut row = Vec::with_capacity(cols);
@@ -101,7 +75,7 @@ pub fn render(img: &Image, cfg: &RenderConfig, charset: &Charset) -> Result<Rend
 /// Column count of the sampled grid: capped at image resolution by
 /// `sample_blocks`, so derive it rather than trusting the request.
 fn effective_row_width(blocks: &[Block], img: &Image, cfg: &RenderConfig) -> usize {
-    let requested = cfg.out_w as usize;
+    let requested = cfg.width as usize;
     let max_cols = img.dimensions.width as usize;
     requested.min(max_cols).min(blocks.len().max(1))
 }
@@ -149,8 +123,8 @@ mod tests {
         let black = solid_img(32, 32, 0);
         let white = solid_img(32, 32, 255);
         let cfg = RenderConfig {
-            out_w: 16,
-            out_h: 8,
+            width: 16,
+            height: Some(8),
             ..Default::default()
         };
         let dark_grid = render_ascii(&black, &cfg).unwrap();
@@ -163,8 +137,8 @@ mod tests {
     fn grid_shape_matches_request() {
         let img = gradient_img(64, 64);
         let cfg = RenderConfig {
-            out_w: 20,
-            out_h: 10,
+            width: 20,
+            height: Some(10),
             ..Default::default()
         };
         let g = render_ascii(&img, &cfg).unwrap();
@@ -177,8 +151,8 @@ mod tests {
     fn deterministic_identical_output() {
         let img = gradient_img(101, 57);
         let cfg = RenderConfig {
-            out_w: 40,
-            out_h: 20,
+            width: 40,
+            height: Some(20),
             ..Default::default()
         };
         let a = render_ascii(&img, &cfg).unwrap();
@@ -191,8 +165,8 @@ mod tests {
     fn invert_flips_mapping() {
         let img = solid_img(16, 16, 0); // dark source
         let cfg = RenderConfig {
-            out_w: 8,
-            out_h: 4,
+            width: 8,
+            height: Some(4),
             invert: true,
             ..Default::default()
         };
@@ -206,13 +180,13 @@ mod tests {
     fn blocks_renderer_uses_block_charset() {
         let img = solid_img(16, 16, 255);
         let cfg = RenderConfig {
-            renderer: RendererKind::Blocks,
-            out_w: 8,
-            out_h: 4,
+            renderer: RendererType::Blocks,
+            width: 8,
+            height: Some(4),
             ..Default::default()
         };
         let g = render_blocks(&img, &cfg).unwrap();
-        assert_eq!(g.renderer, RendererKind::Blocks);
+        assert_eq!(g.renderer, RendererType::Blocks);
         assert_eq!(g.rows[0][0], " "); // white → lightest block glyph
         let dark = solid_img(16, 16, 0);
         let gd = render_blocks(&dark, &cfg).unwrap();
@@ -224,8 +198,9 @@ mod tests {
         let img = solid_img(10, 10, 128);
         let cs = presets::resolve("+#").unwrap(); // 2-glyph custom
         let cfg = RenderConfig {
-            out_w: 5,
-            out_h: 5,
+            width: 5,
+            height: Some(5),
+            charset_override: Some("+#".into()),
             ..Default::default()
         };
         let g = render(&img, &cfg, &cs).unwrap();
@@ -237,8 +212,9 @@ mod tests {
     fn to_text_rows_join_with_newline() {
         let img = solid_img(4, 4, 0);
         let cfg = RenderConfig {
-            out_w: 2,
-            out_h: 2,
+            width: 2,
+            height: Some(2),
+            aspect_ratio: 1.0,
             ..Default::default()
         };
         let g = render_ascii(&img, &cfg).unwrap();
@@ -249,8 +225,8 @@ mod tests {
     fn tiny_image_single_cell() {
         let img = solid_img(1, 1, 255);
         let cfg = RenderConfig {
-            out_w: 100,
-            out_h: 50,
+            width: 100,
+            height: Some(50),
             ..Default::default()
         };
         let g = render_ascii(&img, &cfg).unwrap();
@@ -272,8 +248,8 @@ mod tests {
         .unwrap();
         let img = Image::new(dims, buf, ImageMetadata::default()).unwrap();
         let cfg = RenderConfig {
-            out_w: 2,
-            out_h: 1,
+            width: 2,
+            height: Some(1),
             aspect_ratio: 1.0,
             ..Default::default()
         };
@@ -285,8 +261,8 @@ mod tests {
     fn wide_image_full_width_coverage() {
         let img = gradient_img(500, 3);
         let cfg = RenderConfig {
-            out_w: 100,
-            out_h: 2,
+            width: 100,
+            height: Some(2),
             aspect_ratio: 1.0,
             ..Default::default()
         };

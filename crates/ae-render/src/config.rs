@@ -106,6 +106,8 @@ pub struct RenderConfig {
     /// Terminal-cell correction; 0.5 default, 1.0 = square (`--no-aspect`).
     pub aspect_ratio: f32,
     pub invert: bool,
+    /// Requested output height in rows; `None` derives from width + aspect.
+    pub height: Option<u32>,
     /// Raw `--charset` value: preset name or custom glyph string.
     pub charset_override: Option<String>,
     pub color: ColorMode,
@@ -118,6 +120,7 @@ impl Default for RenderConfig {
             width: DEFAULT_RENDER_WIDTH,
             aspect_ratio: DEFAULT_ASPECT_RATIO,
             invert: false,
+            height: None,
             charset_override: None,
             color: ColorMode::default(),
         }
