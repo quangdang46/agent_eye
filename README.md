@@ -152,10 +152,10 @@ ae <command> <image> [options]
 
 | | Original | ae ascii | ae blocks | ae braille+dither | ae geometry |
 |---|---|---|---|---|---|
-| **Portrait** (976×538) | ![](docs/images/portrait-original.jpg) | ![](docs/images/portrait-ae-ascii.png) | ![](docs/images/portrait-ae-blocks.png) | ![](docs/images/portrait-ae-braille.png) | ![](docs/images/portrait-ae-geometry.png) |
-| **UI Layout** (64×48) | ![](docs/images/ui-original.png) | ![](docs/images/ui-ae-ascii.png) | ![](docs/images/ui-ae-blocks.png) | ![](docs/images/ui-ae-braille.png) | ![](docs/images/ui-ae-geometry.png) |
-| **Button** (32×32) | ![](docs/images/button-original.png) | ![](docs/images/button-ae-ascii.png) | ![](docs/images/button-ae-blocks.png) | ![](docs/images/button-ae-braille.png) | ![](docs/images/button-ae-geometry.png) |
-| **Logo** WebP (1672×941) | ![](docs/images/logo-original.webp) | ![](docs/images/logo-ae-ascii.png) | ![](docs/images/logo-ae-blocks.png) | ![](docs/images/logo-ae-braille.png) | ![](docs/images/logo-ae-geometry.png) |
+| **Portrait** (976×538) | ![](docs/images/portrait-original.jpg) | ![](docs/images/portrait-ascii.png) | ![](docs/images/portrait-blocks.png) | ![](docs/images/portrait-braille.png) | ![](docs/images/portrait-geometry.png) |
+| **UI Layout** (64×48) | ![](docs/images/ui-original.png) | ![](docs/images/ui-ascii.png) | ![](docs/images/ui-blocks.png) | ![](docs/images/ui-braille.png) | ![](docs/images/ui-geometry.png) |
+| **Button** (32×32) | ![](docs/images/button-original.png) | ![](docs/images/button-ascii.png) | ![](docs/images/button-blocks.png) | ![](docs/images/button-braille.png) | ![](docs/images/button-geometry.png) |
+| **Logo** WebP (1672×941) | ![](docs/images/logo-original.webp) | ![](docs/images/logo-ascii.png) | ![](docs/images/logo-blocks.png) | ![](docs/images/logo-braille.png) | ![](docs/images/logo-geometry.png) |
 
 **What the agent gets from each column:**
 - **Original**: what a vision model would see (baseline)
