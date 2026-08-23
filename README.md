@@ -22,8 +22,6 @@ questions with fewer tokens and more accuracy.
   <img src="ae_illustration.webp" alt="ae — Give text-only AI agents eyes">
 </div>
 
-<div align="center">
-
 ```text
                     IMAGE
                       │

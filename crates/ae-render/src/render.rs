@@ -53,10 +53,15 @@ pub fn render(img: &Image, cfg: &RenderConfig, charset: &Charset) -> Result<Rend
         charset.clone()
     };
     cfg.validate()?;
-    let out_h = cfg
-        .height
-        .unwrap_or((cfg.width as f32 / cfg.aspect_ratio) as u32)
-        .max(1);
+    // Derive output rows from the IMAGE's aspect ratio, not width÷aspect.
+    // block_h = block_w / aspect_ratio; total rows = img_h / block_h.
+    let out_h = cfg.height.unwrap_or_else(|| {
+        let block_w = (img.dimensions.width as f32 / cfg.width as f32)
+            .ceil()
+            .max(1.0);
+        let block_h_f = block_w / cfg.aspect_ratio;
+        ((img.dimensions.height as f32) / block_h_f).ceil().max(1.0) as u32
+    });
     let blocks = sample_blocks(img, cfg.width, out_h, cfg.aspect_ratio)?;
     let cols = effective_row_width(&blocks, img, cfg);
     let mut rows: Vec<Vec<String>> = Vec::with_capacity(blocks.len() / cols.max(1));

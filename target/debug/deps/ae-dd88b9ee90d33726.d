@@ -1,0 +1,12 @@
+/Users/tranquangdang21/Projects/agent_eye/target/debug/deps/ae-dd88b9ee90d33726.d: /Users/tranquangdang21/Projects/agent_eye/clippy.toml crates/ae-cli/src/main.rs Cargo.toml
+
+/Users/tranquangdang21/Projects/agent_eye/target/debug/deps/libae-dd88b9ee90d33726.rmeta: /Users/tranquangdang21/Projects/agent_eye/clippy.toml crates/ae-cli/src/main.rs Cargo.toml
+
+/Users/tranquangdang21/Projects/agent_eye/clippy.toml:
+crates/ae-cli/src/main.rs:
+Cargo.toml:
+
+# env-dep:CARGO_PKG_DESCRIPTION=Agent-Eye CLI: orchestration of ae-core and ae-render
+# env-dep:CARGO_PKG_VERSION=0.1.0
+# env-dep:CLIPPY_ARGS=
+# env-dep:CLIPPY_CONF_DIR

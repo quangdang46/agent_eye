@@ -1,0 +1,14 @@
+/Users/tranquangdang21/Projects/agent_eye/target/release/deps/thiserror-bb834a3bfffd5959.d: /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/lib.rs /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/aserror.rs /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/display.rs /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/var.rs /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/private.rs /Users/tranquangdang21/Projects/agent_eye/target/release/build/thiserror-dde297fe89216b7f/out/private.rs
+
+/Users/tranquangdang21/Projects/agent_eye/target/release/deps/libthiserror-bb834a3bfffd5959.rlib: /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/lib.rs /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/aserror.rs /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/display.rs /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/var.rs /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/private.rs /Users/tranquangdang21/Projects/agent_eye/target/release/build/thiserror-dde297fe89216b7f/out/private.rs
+
+/Users/tranquangdang21/Projects/agent_eye/target/release/deps/libthiserror-bb834a3bfffd5959.rmeta: /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/lib.rs /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/aserror.rs /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/display.rs /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/var.rs /Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/private.rs /Users/tranquangdang21/Projects/agent_eye/target/release/build/thiserror-dde297fe89216b7f/out/private.rs
+
+/Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/lib.rs:
+/Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/aserror.rs:
+/Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/display.rs:
+/Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/var.rs:
+/Users/tranquangdang21/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.20/src/private.rs:
+/Users/tranquangdang21/Projects/agent_eye/target/release/build/thiserror-dde297fe89216b7f/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/tranquangdang21/Projects/agent_eye/target/release/build/thiserror-dde297fe89216b7f/out
