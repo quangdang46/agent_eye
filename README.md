@@ -1,10 +1,11 @@
 # ae — Agent-Eye
 
 > [!WARNING]
-> **🚧 MVP / Work in Progress** — `ae` is in MVP stage. The core pipeline
-> (decode → region detection → spatial relations → render) is complete and
-> fully tested, but features may change without notice. Not production-ready.
-> Feedback and bug reports welcome!
+> **🔬 Proof of Concept** — `ae` is a POC validating whether structured visual
+> evidence (regions, spatial relations, provenance) helps text-only AI agents
+> understand images better than raw ASCII. Core pipeline is complete and tested
+> (139 tests), but this is **not production software** — APIs and features may
+> change or be removed based on benchmark results. Feedback welcome!
 
 **`ae` — Agent-Eye: give text-only AI agents eyes, without a vision model.**
 
